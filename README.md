@@ -102,3 +102,23 @@ MIT license for ExactMoE original code. Model weights retain their own license a
     exactmoe profile --hf zai-org/GLM-5.3 --revision aca966e4e02791568aa6a4ced368624b3d897f42
 
 Check the expert_layout.metadata_complete field: it must be true before attempting FP8 expert paging. This checks metadata only, not checkpoint data or output quality.
+
+### Inspect real GLM-5.3 FP8 tensor shapes WITHOUT downloading weight shards
+
+Safetensors files put the full tensor **header** at the start of each file.
+The `remote-header` command makes two bounded HTTP Range requests to the
+pinned model revision, verifies byte-range responses (HTTP 206 only), and parses
+the true FP8 expert matrix and inverse-scale tensor shapes. It **never reads
+the weight payload**. The server must support HTTP byte ranges.
+
+```powershell
+exactmoe remote-header --hf zai-org/GLM-5.3 --revision aca966e4e02791568aa6a4ced368624b3d897f42 --shard model-00002-of-00141.safetensors --samples 5 | Out-File -Encoding utf8 glm53-shard02-header.json
+```
+
+A response with HTTP 200 is **rejected before any bytes are read** to avoid
+accidentally downloading an entire multi-gigabyte shard. Header length is capped
+at 16 MiB. The JSON report records the actual number of bytes transferred and
+FP8 128×128 block scale shape checks. This is metadata inspection ONLY;
+no GPU matrix multiplication, routing or model parity has been verified.
+
+No model tensors, checkpoints or local hardware reports should be committed.

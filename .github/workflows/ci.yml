@@ -62,3 +62,21 @@ jobs:
           if ($report.schema_version -ne 1 -or -not $report.processor) {
             throw 'Missing basic hardware report fields'
           }
+      - name: Validate read-only Windows GLM-5.3 first-run script
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path (Get-Location) 'scripts/first-run-glm53.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          )
+          if ($errors.Count -gt 0) {
+            $errors | Format-List | Out-String | Write-Error
+            exit 1
+          }
+          $absent = Join-Path $env:TEMP 'exactmoe-no-model-download'
+          & powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/first-run-glm53.ps1 -ModelDir $absent
+          if ($LASTEXITCODE -ne 0) { throw 'Read-only missing-model scenario failed' }

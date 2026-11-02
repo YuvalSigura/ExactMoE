@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "exactmoe"
+version = "0.1.0"
+description = "Byte-preserving out-of-core tensor paging and verifiable MoE experiments"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Yuval Sigura" }]
+dependencies = []
+
+[project.optional-dependencies]
+demo = ["numpy>=1.24", "safetensors>=0.4.3"]
+research = ["huggingface_hub>=0.26"]
+dev = ["numpy>=1.24", "safetensors>=0.4.3", "pytest>=8"]
+ 
+[project.scripts]
+exactmoe = "exactmoe.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["exactmoe*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

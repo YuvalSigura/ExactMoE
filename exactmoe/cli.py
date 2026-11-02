@@ -43,6 +43,15 @@ def make_parser() -> argparse.ArgumentParser:
     expert.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
     expert.add_argument("--seed", type=int, default=42)
     expert.add_argument("--block-size", type=int, default=128)
+    layer = subs.add_parser(
+        "layer-smoke",
+        help="run one ORIGINAL FP8 GLM sparse MoE FFN (router+shared); no attention",
+    )
+    layer.add_argument("model_dir", type=Path)
+    layer.add_argument("--layer", type=int, default=3)
+    layer.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
+    layer.add_argument("--seed", type=int, default=42)
+    layer.add_argument("--block-size", type=int, default=128)
     subs.add_parser("demo", help="run streaming-vs-dense correctness check on tiny synthetic MoE")
     bench = subs.add_parser("bench", help="benchmark tiny synthetic CPU MoE")
     bench.add_argument("--steps", type=int, default=100)
@@ -88,6 +97,20 @@ def main(argv: list[str] | None = None) -> int:
         x = np.random.default_rng(args.seed).normal(0, 0.1, input_size).astype(np.float32)
         result = forward_expert(index, args.layer, args.expert, x,
                                 device=args.device, block_size=args.block_size)
+        result["input_seed"] = args.seed
+    elif args.command == "layer-smoke":
+        from .moe_layer import forward_moe_ffn
+        import numpy as np
+        from pathlib import Path
+        config_path = args.model_dir / "config.json"
+        if not config_path.is_file():
+            raise SystemExit(f"Missing model config: {config_path}")
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        index = TensorIndex.from_directory(args.model_dir)
+        hidden = int(config["hidden_size"])
+        x = np.random.default_rng(args.seed).normal(0, 0.1, hidden).astype(np.float32)
+        result = forward_moe_ffn(index, args.layer, x, config,
+                                 device=args.device, block_size=args.block_size)
         result["input_seed"] = args.seed
     else:
         from .demo import run_demo

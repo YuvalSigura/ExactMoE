@@ -16,6 +16,16 @@ from exactmoe.expert_acquire import acquire_remote, validate_sample, _request
 from exactmoe.storage import TensorIndex
 
 
+
+def fake_config():
+    return {
+        "model_type": "glm_moe_dsa", "num_hidden_layers": 78,
+        "n_routed_experts": 256, "first_k_dense_replace": 3,
+        "hidden_size": 5, "moe_intermediate_size": 7,
+        "quantization_config": {"quant_method": "fp8", "fmt": "e4m3",
+                                "activation_scheme": "dynamic", "weight_block_size": [128, 128]},
+    }
+
 def fake_remote_source(layer=3, expert=0, *, hidden=5, intermediate=7, broken=None):
     shape = {"gate_proj": (intermediate, hidden), "up_proj": (intermediate, hidden),
              "down_proj": (hidden, intermediate)}
@@ -44,7 +54,7 @@ def make_sample(tmp_path, broken=None, layer=3, expert=0, *, cap=48 * 1024 * 102
     entries, payload, data = fake_remote_source(layer, expert, broken=broken)
     shard = "model-00001-of-00141.safetensors"
     manifest = {"weight_map": {n: shard for n in entries}}
-    config = {"hidden_size": 5, "moe_intermediate_size": 7}
+    config = fake_config()
     base = 100
     def metadata(name):
         return (config if name == "config.json" else manifest), 200
@@ -205,7 +215,7 @@ def test_malformed_fp8_weight_dtype_rejected(tmp_path):
     with pytest.raises(ValueError, match="inconsistent tensor payload|incorrect source dtype"):
         acquire_remote(tmp_path / "malformed", 3, 0,
             fetch_json=lambda filename: (
-                ({"hidden_size": 5, "moe_intermediate_size": 7}
+                (fake_config()
                  if filename == "config.json" else {"weight_map": {n: shard for n in entries}}), 200),
             fetch_header=lambda name: (entries, 100, 100 + len(data), '"etag"', 100),
             fetch_range=lambda url, *, start, end:
@@ -218,7 +228,7 @@ def test_remote_etag_change_is_rejected(tmp_path):
     with pytest.raises(ValueError, match="source shard changed"):
         acquire_remote(tmp_path / "tampered", 3, 0,
             fetch_json=lambda filename: (
-                ({"hidden_size": 5, "moe_intermediate_size": 7}
+                (fake_config()
                  if filename == "config.json" else {"weight_map": {n: shard for n in entries}}), 200),
             fetch_header=lambda name: (entries, 100, 100 + len(data), '"etag-A"', 100),
             fetch_range=lambda url, *, start, end:

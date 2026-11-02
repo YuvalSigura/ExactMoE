@@ -24,6 +24,9 @@ def make_parser() -> argparse.ArgumentParser:
         description="Byte-preserving MoE weight indexing and correctness experiments",
     )
     subs = parser.add_subparsers(dest="command", required=True)
+    doctor = subs.add_parser("checkpoint-status", help="read-only progress and header validation of a partial model download")
+    doctor.add_argument("model_dir", type=Path)
+    doctor.add_argument("--no-verify-headers", action="store_true")
     inspect = subs.add_parser("inspect", help="inspect safetensors headers without loading weights")
     inspect.add_argument("model_dir", type=Path)
     inspect.add_argument("--expected-experts", type=int)
@@ -76,7 +79,10 @@ def make_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = make_parser().parse_args(argv)
-    if args.command == "inspect":
+    if args.command == "checkpoint-status":
+        from .checkpoint_doctor import checkpoint_status
+        result = checkpoint_status(args.model_dir, verify_headers=not args.no_verify_headers)
+    elif args.command == "inspect":
         index = TensorIndex.from_directory(args.model_dir)
         result = index.summary()
         if args.show_candidates > 0:

@@ -6,6 +6,8 @@ downloads only those two small JSON metadata files from Hugging Face.
 from __future__ import annotations
 
 from collections import Counter
+
+from .glm_catalog import ExpertCatalog
 import json
 from pathlib import Path
 from typing import Any
@@ -51,6 +53,7 @@ def profile_local(directory: str | Path) -> dict[str, Any]:
     if not isinstance(total_size, int) or total_size < 0:
         total_size = None
     names = list(mapping)
+    layout = ExpertCatalog(mapping).audit(config) if config.get('model_type') == 'glm_moe_dsa' else None
     expert_names = [n for n in names if ".experts." in n]
     per_layer = Counter()
     for n in expert_names:
@@ -66,6 +69,7 @@ def profile_local(directory: str | Path) -> dict[str, Any]:
         "shard_count": len(set(mapping.values())),
         "index_declared_weight_bytes": total_size,
         "expert_related_tensor_names": len(expert_names),
+        "expert_layout": layout,
         "layers_with_expert_names": len(per_layer),
         "expert_related_name_samples": expert_names[:12],
         "note": (

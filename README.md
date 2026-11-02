@@ -2,7 +2,7 @@
 
 ## Complete plan to first real local GLM-5.3 answer
 
-Read [GLM53 end-to-end execution plan](docs/GLM53-END-TO-END-PLAN.md) before claiming model support. It specifies 12 dependency-ordered engineering gates, real FP8/DSA correctness, bounded CPU/GPU/NVMe paging, reference parity, a 32-token **full model** acceptance test, and the later local HTTP/UI release.
+Read [GLM53 end-to-end execution plan](docs/GLM53-END-TO-END-PLAN.md) and [all candidate hardware/runtime architectures](docs/GLM53-ALL-ARCHITECTURES.md) before claiming model support. It specifies 12 dependency-ordered engineering gates, real FP8/DSA correctness, bounded CPU/GPU/NVMe paging, reference parity, a 32-token **full model** acceptance test, and the later local HTTP/UI release.
 
 **Status:** Python paging/control-plane demos and pinned model metadata have been validated. The full model cannot yet produce a token here; the proposed `exactmoe serve` command in the plan is NOT implemented.
 

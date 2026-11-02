@@ -33,6 +33,22 @@ They do not generate text, run DSA or validate production numeric parity.
 Optional CUDA device is `--device cuda` with a separate CUDA-capable PyTorch
 installation. Full details: [FP8+MoE stage](docs/FP8-EXPERT-EXECUTION.md).
 
+### Track the original 141-shard download safely
+
+While your pinned GLM-5.3 FP8 checkpoint is downloading:
+
+```powershell
+git pull --ff-only origin main
+exactmoe checkpoint-status "X:\Models\GLM-5.3"
+```
+
+This read-only command checks the safetensors index, enumerates missing
+shards, and validates *present* shard headers and tensor names against the
+official manifest. It does **not** download weights, inspect weight payload
+bytes, validate source cryptographic hashes or claim successful inference.
+Incomplete Hugging Face `.incomplete` transfer files will not be considered
+valid finished shards.
+
 ## Why
 
 A sparse MoE does not evaluate every expert for each token, but all potentially selected experts still need to be accessible. The research question is whether we can move the weight residency requirement to NVMe and accept slower generation **without modifying the original checkpoint or model semantics**.

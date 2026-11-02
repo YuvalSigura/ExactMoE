@@ -33,6 +33,16 @@ def make_parser() -> argparse.ArgumentParser:
     remote.add_argument("--shard", required=True, help="exact shard filename")
     remote.add_argument("--block-size", type=int, default=128)
     remote.add_argument("--samples", type=int, default=8)
+    expert = subs.add_parser(
+        "expert-smoke",
+        help="compute ONE native FP8 routed expert from local checkpoint; NOT full GLM inference",
+    )
+    expert.add_argument("model_dir", type=Path)
+    expert.add_argument("--layer", type=int, default=3)
+    expert.add_argument("--expert", type=int, default=0)
+    expert.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
+    expert.add_argument("--seed", type=int, default=42)
+    expert.add_argument("--block-size", type=int, default=128)
     subs.add_parser("demo", help="run streaming-vs-dense correctness check on tiny synthetic MoE")
     bench = subs.add_parser("bench", help="benchmark tiny synthetic CPU MoE")
     bench.add_argument("--steps", type=int, default=100)
@@ -64,6 +74,21 @@ def main(argv: list[str] | None = None) -> int:
             args.hf, args.revision, args.shard,
             block_size=args.block_size, sample_limit=args.samples,
         )
+    elif args.command == "expert-smoke":
+        from .fp8_reference import forward_expert
+        try:
+            import numpy as np
+        except ImportError as exc:
+            raise SystemExit('Install demo dependencies: pip install -e ".[demo]"') from exc
+        if args.layer < 0 or args.expert < 0:
+            raise SystemExit("--layer and --expert must be nonnegative")
+        index = TensorIndex.from_directory(args.model_dir)
+        name = f"model.layers.{args.layer}.mlp.experts.{args.expert}.gate_proj.weight"
+        input_size = index[name].shape[1]
+        x = np.random.default_rng(args.seed).normal(0, 0.1, input_size).astype(np.float32)
+        result = forward_expert(index, args.layer, args.expert, x,
+                                device=args.device, block_size=args.block_size)
+        result["input_seed"] = args.seed
     else:
         from .demo import run_demo
         if args.command == "bench" and args.steps < 1:

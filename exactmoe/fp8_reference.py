@@ -52,6 +52,8 @@ def _check_weight_and_scale(weight: TensorRecord, scale: TensorRecord,
     rows, cols = weight.shape
     if rows < 1 or cols < 1 or weight.nbytes != rows * cols:
         raise ValueError("invalid FP8 tensor byte length")
+    if cols > MAX_STAGING_BYTES:
+        raise ValueError("one FP8 matrix row exceeds the bounded staging budget")
     if scale.shape != (math.ceil(rows / block_size), math.ceil(cols / block_size)):
         raise ValueError(f"{scale.name}: blockwise scale shape mismatch")
     if scale.nbytes != 4 * math.prod(scale.shape):
@@ -67,7 +69,8 @@ def _matvec_cpu(weight: TensorRecord, scale: TensorRecord, x: np.ndarray,
     out = np.zeros(rows, dtype=np.float32)
     row_batch = max(1, min(block_size, MAX_STAGING_BYTES // cols))
     # Split at scale-row boundaries. The largest source read stays under 32 MiB.
-    for start in range(0, rows, row_batch):
+    start = 0
+    while start < rows:
         nrows = min(row_batch, rows - start, block_size - start % block_size)
         raw = read_bytes(weight, offset=start * cols, length=nrows * cols)
         bit_rows = np.frombuffer(raw, dtype=np.uint8).reshape(nrows, cols)
@@ -87,6 +90,7 @@ def _matvec_cpu(weight: TensorRecord, scale: TensorRecord, x: np.ndarray,
                 raise ValueError("FP8 checkpoint contains E4M3FN NaN")
             accum += matrix @ x[col:stop]
         out[start:start + nrows] = accum
+        start += nrows
     return out
 
 
@@ -109,7 +113,8 @@ def _matvec_cuda(weight: TensorRecord, scale: TensorRecord, x: np.ndarray,
     out = np.empty(rows, dtype=np.float32)
     row_batch = max(1, min(block_size, MAX_STAGING_BYTES // cols))
     with torch.no_grad():
-        for start in range(0, rows, row_batch):
+        start = 0
+        while start < rows:
             nrows = min(row_batch, rows - start, block_size - start % block_size)
             bits = np.frombuffer(
                 read_bytes(weight, offset=start * cols, length=nrows * cols),
@@ -131,6 +136,7 @@ def _matvec_cuda(weight: TensorRecord, scale: TensorRecord, x: np.ndarray,
                 a = torch.as_tensor(np.array(data, copy=True), device="cuda")
                 accum.add_(torch.mv(a, x_gpu[col:stop]))
             out[start:start + nrows] = accum.cpu().numpy()
+            start += nrows
     return out
 
 

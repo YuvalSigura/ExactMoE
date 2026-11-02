@@ -24,6 +24,15 @@ def make_parser() -> argparse.ArgumentParser:
     group.add_argument("--local", type=Path, help="directory holding config and index JSON")
     group.add_argument("--hf", help="Hugging Face repository ID; downloads two JSON files only")
     profile.add_argument("--revision", help="optional pinned HF revision")
+    remote = subs.add_parser(
+        "remote-header",
+        help="inspect one remote safetensors shard header using bounded HTTP Range, no weight download",
+    )
+    remote.add_argument("--hf", required=True, help="model repository owner/name")
+    remote.add_argument("--revision", required=True, help="pinned 40-character checkpoint commit SHA")
+    remote.add_argument("--shard", required=True, help="exact shard filename")
+    remote.add_argument("--block-size", type=int, default=128)
+    remote.add_argument("--samples", type=int, default=8)
     subs.add_parser("demo", help="run streaming-vs-dense correctness check on tiny synthetic MoE")
     bench = subs.add_parser("bench", help="benchmark tiny synthetic CPU MoE")
     bench.add_argument("--steps", type=int, default=100)
@@ -48,6 +57,12 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit("--revision can be used only with --hf")
         result = profile_local(args.local) if args.local else profile_hf(
             args.hf, revision=args.revision
+        )
+    elif args.command == "remote-header":
+        from .remote_headers import inspect_remote_header
+        result = inspect_remote_header(
+            args.hf, args.revision, args.shard,
+            block_size=args.block_size, sample_limit=args.samples,
         )
     else:
         from .demo import run_demo

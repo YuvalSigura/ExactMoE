@@ -5,6 +5,7 @@
 **Target checkpoint:** zai-org/GLM-5.3, pinned revision aca966e4e02791568aa6a4ced368624b3d897f42, **native FP8**.
 **Local target:** Intel Core Ultra 7 265KF (8P + 12E; AVX2, no AVX-512), RTX 5060 Ti 16 GiB-class VRAM, 128 GiB DDR5 RAM, NVMe SSD.
 **Mandatory constraint:** Do not delete/merge/retrain experts, change router/top-k, substitute another model, or further quantize original checkpoint weights.
+**Architecture options:** see [All candidate execution paths](GLM53-ALL-ARCHITECTURES.md), including reuse-first AVX2 FP8 KTransformers, InferSSD and a custom paging backend. Correctness and end-to-end validation decide the winner.
 **Explicit non-promise:** Feasibility and real-world performance on this specific PC have NOT been demonstrated. Native FP8 checkpoint semantics and numerical reference agreement are measurable goals; bitwise GPU-independent equality is not guaranteed.
 
 ## Definition of DONE — two different success bars
@@ -58,7 +59,7 @@ A speculative predictor (CPU/NPU) MAY hint which pages to fetch, but must NEVER 
 ### P1 — Hardware and platform feasibility on the actual PC
 **Implement:** Capture 265KF feature flags, physical P/E topology, RAM configured MT/s, usable pinned memory, PCIe topology, SSD read bandwidth under random/small-range and sequential loads, GPU SM120 feature support and native FP8 kernel compatibility. Compare native Windows vs WSL2 Linux for CUDA/toolchain reliability. Intel NPU enumeration is optional. No overclocking or driver modification by scripts.
 
-**Exit:** real hardware JSON, bandwidth and latency report, conservative live-memory budgets; chosen development OS and verified CUDA build can launch a tiny kernel on GPU. Do not use KTransformers' AVX-512 CPU FP8 kernel on the AVX2-only 265KF without a compatible fallback.
+**Exit:** real hardware JSON, bandwidth and latency report, conservative live-memory budgets; chosen development OS and verified CUDA build can launch a tiny kernel on GPU. KTransformers' recent releases document AVX2-only native FP8 MoE kernels; test this backend on the 265KF before writing new FP8 CPU kernels, but do not mistake tested GLM-5 or GLM-5.3-Flash support for full GLM-5.3 compatibility.
 
 ### P2 — Complete native checkpoint layout, byte integrity and disk store
 **Implement:** Read safetensors headers for representative, then all 141 pinned shards (remote byte-range metadata wherever supported, no full-weight download yet). Cross-check every tensor shape, dtype, byte range, shard mapping and FP8 inverse-scale shape, including shared experts, dense weights, DSA indexer and MTP tensors. Respect Hugging Face signed/redirected download URLs; fail closed if Range is ignored. Add per-tensor metadata store and pinned revision validation. Make ranged reads use strict byte caps, expected file identity and hashes (where available).
@@ -119,6 +120,10 @@ A speculative predictor (CPU/NPU) MAY hint which pages to fetch, but must NEVER 
 - **Go/no-go between gates:** each gate needs an automated test, a hardware run (where applicable), saved evidence and a reviewed PR. No silent bypass.
 - **Reference priority:** GLM5 source/Transformers architecture and vLLM operator behavior; reuse reference formulas with appropriate license compliance instead of guessing DSA kernels.
 
+## Alternative paths and selection criteria
+
+Do not assume a custom PyTorch/Triton runtime is the best initial architecture. First investigate whether current KTransformers AVX2 FP8 kernels plus SGLang's GLM-5.3 DSA code can be used with native bytes and disk-backed experts; in parallel audit InferSSD's SSD cache/range reader and GGUF constraints. Use original FP8 checkpoint only for the final acceptance. An AVX2 compatibility mode is not evidence that full GLM-5.3 weights can fit 128GB RAM. See [all pathways](GLM53-ALL-ARCHITECTURES.md) for decision matrix, kill criteria and optional lossless disk repacking, reversible compression, GPU tiling, KV spill, predictive prefetch and exact speculative decoding.
+
 ## Failure responses (no false completion)
 
 | Problem | Required engineering response |
@@ -146,7 +151,7 @@ The command-line server does not exist at present; this syntax is an API DESIGN 
 
 ## Immediate next three concrete PRs
 
-1. **P1 hardware feasibility bench:** add read-only effective RAM speed, optional SM120 CUDA kernel smoke, SSD random-read benchmark on a bounded synthetic file with cleanup, and report generator; run on user's PC.
+1. **P1 hardware feasibility bench and available-runtime probe:** add read-only effective RAM speed, optional SM120 CUDA kernel smoke, SSD random-read benchmark on a bounded synthetic file with cleanup, and report generator; run on user's PC.
 2. **P2 layout audit:** bulk inspect pinned shard headers (metadata only), cross-validate scale shape, tensor byte offsets, official manifest and model-level tensor coverage; handle HTTP Range failures cleanly. Do not store private user report data in Git.
 3. **P3+P4 minimum genuine expert:** strict capped acquisition of a real expert's unchanged FP8 bytes and scale tensors; independent F32 reference op, then compatible GPU matmul, validated by separate oracle fixtures.
 

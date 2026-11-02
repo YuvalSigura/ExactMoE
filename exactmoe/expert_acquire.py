@@ -142,6 +142,17 @@ def _compile_selection(layer: int, expert: int, manifest: dict, config: dict):
     intermediate = config.get("moe_intermediate_size")
     if type(hidden) is not int or type(intermediate) is not int:
         raise ValueError("official config lacks hidden_size/moe_intermediate_size")
+    quant = config.get("quantization_config")
+    if (config.get("model_type") != "glm_moe_dsa"
+            or config.get("num_hidden_layers") != 78
+            or config.get("n_routed_experts") != 256
+            or config.get("first_k_dense_replace") != 3
+            or not isinstance(quant, dict)
+            or quant.get("quant_method") != "fp8"
+            or quant.get("fmt") != "e4m3"
+            or quant.get("activation_scheme") != "dynamic"
+            or quant.get("weight_block_size") != [128, 128]):
+        raise ValueError("source config does not match pinned GLM-5.3 FP8 architecture")
     for p, (w, s) in names(layer, expert).items():
         for n in (w, s):
             if n not in mp:

@@ -8,7 +8,7 @@ This is an architectural *decision matrix*. None of these paths proves full GLM-
 
 | Path | How it works | Primary benefit | Blocking risk | Priority / decision |
 |---|---|---|---|---|
-| A — KTransformers AVX2 + SGLang with original FP8 | Reuse GLM routing/DSA CUDA frontend and AVX2-native expert kernels; modify its expert loader to page from NVMe rather than requiring >=checkpoint-size RAM | Most existing GLM native kernel/operator work may be reusable | Native *full GLM-5.3* support on 265KF/16GB still unverified; baseline KTransformers keeps model weights in RAM; larger DSA/caches may not fit GPU | **Probe first**, isolate one original expert, add NVMe source |
+| A — KTransformers AVX2 + SGLang with original FP8 | Reuse GLM routing/DSA CUDA frontend and AVX2-native expert kernels; modify its expert loader to page from NVMe rather than requiring >=checkpoint-size RAM | Most existing GLM native kernel/operator work may be reusable | Native *full GLM-5.3* support on 265KF/16GB still unverified; AVX2 guide recommends >=24GB GPU and RAM >= checkpoint size, both unmet here; disk tier and smaller GPU working sets require substantial modification | **Probe first**, isolate one original expert, add NVMe source |
 | B — InferSSD / llama.cpp backend adaptation | Reuse its SSD expert tier/cache and CUDA execution; add support for GLM-MoE-DSA, pinned original FP8 safetensors or byte-preserving compatible container | Tested SSD-first execution architecture and bounded cache | Current tested models are GGUF and quantized, Windows in progress; direct native publisher FP8 and entire GLM 5.3 decoder unverified | **Probe second**; reuse paging design more than assumption of model support |
 | C — Custom ExactMoE scheduler with existing PyTorch/Triton/vLLM kernels | Implement original shard reader and page/stage weights; port original GLM operations incrementally; use reference runtime's mathematics | Maximum checkpoint fidelity and resource accounting | Massive attention/DSA/FP8 kernel engineering and benchmarking cost | **Fallback / integration path** if A/B unsupported |
 | D — GPU out-of-core per-expert and per-tile | Load one selected expert at a time (or pieces of each matrix), original blockwise FP8+scales, compute on GPU; spill buffers between operators | 16GB GPU can be sufficient in principle for bounded *working set* | Transfer and kernel launch overhead; GPU/CPU resources and DSA context | **Must-have execution technique** independent of A/B/C |
@@ -41,6 +41,16 @@ This is an architectural *decision matrix*. None of these paths proves full GLM-
 - Small Intel NPU cannot host full GLM expert arithmetic; 13 TOPS is a peak INT8 marketing bound, not FP8 native transformer throughput.
 - DirectStorage/GPUDirect Storage is an optional **measured I/O backend**, not guaranteed on consumer RTX/Windows. NVIDIA's GPUDirect Storage ecosystem is Linux-focused; Windows is not generally supported for GDS. Do not claim it eliminates all PCIe and SSD constraints.
 - Extra context tricks like KV quantization may change attention numerical behavior and therefore aren't enabled in the strict parity baseline.
+
+## Honest blockers on this PC
+
+**Do not confuse a supported instruction set with a working full-model deployment.** KTransformers' AVX2 guide recommends 24GB+ VRAM and RAM at least equal to the model's weights. This workstation has 16GB VRAM and 128GB RAM versus ~703.7GiB original FP8 model weights. It is a *kernel donor / possible base architecture*, not a turnkey solution.
+
+**Latency reality:** Even if the cache/storage scheme fits, full GLM-5.3 generation could take many seconds to minutes per token, especially at short prompt prefill. A correct first answer and a usable conversational product are separate milestone bars.
+
+**Exactness reality:** FP8 bytes untouched plus exact router selection does not imply bitwise-identical output across CPU/GPU arithmetic; quality-parity needs independent numerical tests and stable greedy output fixtures.
+
+**Router prefetch reality:** The *next* layer's router depends on that layer's input, which in turn depends on preceding computation. Accurate next-layer lookahead generally needs prediction; the actual router must still run and may force a synchronous SSD miss.
 
 ## Hard engineering and safety gates
 

@@ -196,3 +196,47 @@ def test_range_rejects_ignored_http_range_and_bad_content_range(monkeypatch):
     fake.response = Response(206, cr="bytes 0-3/100", body=b"abc")
     with pytest.raises(ValueError, match="short/oversized"):
         acquire._request(url, start=0, end=3)
+
+def test_malformed_fp8_weight_dtype_rejected(tmp_path):
+    entries, payload, data = fake_remote_source()
+    first = names(3, 0)["gate_proj"][0]
+    entries[first]["dtype"] = "F32"
+    shard = "model-00001-of-00141.safetensors"
+    with pytest.raises(ValueError, match="inconsistent tensor payload|incorrect source dtype"):
+        acquire_remote(tmp_path / "malformed", 3, 0,
+            fetch_json=lambda filename: (
+                ({"hidden_size": 5, "moe_intermediate_size": 7}
+                 if filename == "config.json" else {"weight_map": {n: shard for n in entries}}), 200),
+            fetch_header=lambda name: (entries, 100, 100 + len(data), '"etag"', 100),
+            fetch_range=lambda url, *, start, end:
+                (data[start - 100:end - 99], 100 + len(data), '"etag"'))
+
+
+def test_remote_etag_change_is_rejected(tmp_path):
+    entries, payload, data = fake_remote_source()
+    shard = "model-00001-of-00141.safetensors"
+    with pytest.raises(ValueError, match="source shard changed"):
+        acquire_remote(tmp_path / "tampered", 3, 0,
+            fetch_json=lambda filename: (
+                ({"hidden_size": 5, "moe_intermediate_size": 7}
+                 if filename == "config.json" else {"weight_map": {n: shard for n in entries}}), 200),
+            fetch_header=lambda name: (entries, 100, 100 + len(data), '"etag-A"', 100),
+            fetch_range=lambda url, *, start, end:
+                (data[start - 100:end - 99], 100 + len(data), '"etag-B"'))
+
+
+def test_pager_eviction_keeps_exact_source_bytes(tmp_path):
+    from exactmoe.pager import ExpertPager
+    from exactmoe.storage import read_bytes
+    _, out = make_sample(tmp_path)
+    index = _index(out)
+    first = names(3, 0)["gate_proj"][0]
+    expected = read_bytes(index[first])
+    with ExpertPager(index, cache_bytes=40, workers=1) as pager:
+        assert pager.get(first) == expected
+        for pair in names(3, 0).values():
+            for tensor in pair:
+                pager.get(tensor)
+        assert pager.get(first) == expected
+        assert pager.cache.stats().evictions >= 1
+        assert pager.cache.stats().resident_bytes <= 40

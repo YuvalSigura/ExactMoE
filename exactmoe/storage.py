@@ -140,6 +140,65 @@ class TensorIndex:
                     raise ValueError(f"manifest shard mismatch: {name}")
         return cls(tensors, root)
 
+    @classmethod
+    def from_selected(cls, directory: str | Path, names: list[str]) -> "TensorIndex":
+        """Read ONLY requested original tensor headers and their existing shards.
+
+        This works with a partial model download once the *required* shard files
+        are fully present, without checking or touching the other ~140 shards.
+        It does not bypass manifest validation and never follows paths outside
+        the model root.
+        """
+        root = Path(directory).resolve(strict=True)
+        manifest_path = root / "model.safetensors.index.json"
+        if not manifest_path.is_file():
+            raise FileNotFoundError("sharded index JSON is required for selective reads")
+        if not names or len(names) != len(set(names)):
+            raise ValueError("tensor name list must be nonempty and unique")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        mapping = manifest.get("weight_map")
+        if not isinstance(mapping, dict):
+            raise ValueError("invalid model weight_map")
+        missing = [name for name in names if name not in mapping]
+        if missing:
+            raise KeyError(f"missing names from official manifest: {missing[:5]}")
+        expected = {name: _safe_shard(root, mapping[name]) for name in names}
+        result: dict[str, TensorRecord] = {}
+        for shard in sorted(set(expected.values())):
+            scanned = scan_safetensors(shard)
+            for name, path in expected.items():
+                if path == shard:
+                    rec = scanned.get(name)
+                    if rec is None or rec.path != path:
+                        raise ValueError(f"tensor {name} absent from mapped shard {shard.name}")
+                    result[name] = rec
+        if set(result) != set(names):
+            raise ValueError("not all requested tensors could be validated")
+        return cls(result, root)
+
+    @classmethod
+    def shard_plan(cls, directory: str | Path, names: list[str]) -> dict[str, list[str]]:
+        """Report official shard filenames without requiring any weight shards."""
+        root = Path(directory).resolve(strict=True)
+        manifest_path = root / "model.safetensors.index.json"
+        if not manifest_path.is_file():
+            raise FileNotFoundError(manifest_path)
+        mapping = json.loads(manifest_path.read_text(encoding="utf-8")).get("weight_map")
+        if not isinstance(mapping, dict):
+            raise ValueError("invalid model weight_map")
+        plan: dict[str, list[str]] = {}
+        for name in names:
+            if name not in mapping:
+                raise KeyError(name)
+            shard = mapping[name]
+            if not isinstance(shard, str) or not shard.endswith(".safetensors"):
+                raise ValueError("invalid shard name")
+            # Do not require shard to exist; reject path traversal lexically.
+            if Path(shard).name != shard or "/" in shard or "\\" in shard:
+                raise ValueError("unsafe shard name")
+            plan.setdefault(shard, []).append(name)
+        return dict(sorted(plan.items()))
+
     def __getitem__(self, name: str) -> TensorRecord:
         return self.tensors[name]
 

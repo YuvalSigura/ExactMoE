@@ -122,3 +122,18 @@ FP8 128×128 block scale shape checks. This is metadata inspection ONLY;
 no GPU matrix multiplication, routing or model parity has been verified.
 
 No model tensors, checkpoints or local hardware reports should be committed.
+
+### Intel Core Ultra 7 265KF: hybrid CPU + NPU + NVIDIA GPU path
+
+For the 20-core Arrow Lake CPU (8 P-cores + 12 E-cores), Intel AI Boost NPU
+(13 INT8 TOPS peak), 128 GiB RAM, and RTX 5060 Ti 16GB:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\profile-ai-hardware.ps1
+# Optionally install OpenVINO and repeat with -CheckOpenVINO to enumerate Intel NPU
+```
+
+This read-only profiler creates a **local** hardware report under
+`artifacts/hardware/ai-platform.json`. Hardware capability is not runtime
+model support. See [Core Ultra 265KF design](docs/CORE-ULTRA-265KF.md) for
+a proposed work partition and strict same-quality validation criteria.

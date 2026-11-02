@@ -42,3 +42,23 @@ jobs:
             $errors | Format-List | Out-String | Write-Error
             exit 1
           }
+      - name: Verify AI platform profiler syntax and basic Windows execution
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path (Get-Location) 'scripts/profile-ai-hardware.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          )
+          if ($errors.Count -gt 0) {
+            $errors | Format-List | Out-String | Write-Error
+            exit 1
+          }
+          & ./scripts/profile-ai-hardware.ps1 -OutputPath ./artifacts/hardware/ci-hardware.json
+          $report = Get-Content -Raw ./artifacts/hardware/ci-hardware.json | ConvertFrom-Json
+          if ($report.schema_version -ne 1 -or -not $report.processor) {
+            throw 'Missing basic hardware report fields'
+          }

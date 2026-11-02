@@ -13,7 +13,25 @@ Read [GLM53 end-to-end execution plan](docs/GLM53-END-TO-END-PLAN.md) and [all c
 
 ExactMoE investigates how to run frontier-scale Mixture-of-Experts models on consumer machines by moving unchanged model weight bytes between SSD, RAM and GPU. The long-term research target is the **full GLM-5.3 (~744B total parameters)**, not a distilled or smaller substitute.
 
-> **Honest status (v0.1):** This repository currently contains a functional **safetensors metadata scanner, byte-preserving tensor/slice reader, bounded RAM cache, asynchronous prefetch, and runnable correctness-checked miniature MoE.** It is **not yet a GLM-5.3 inference runtime**. It does not implement GLM routing, DSA attention, FP8 matmul or CUDA paging.
+> **Honest status (v0.1):** This repository currently contains a functional **safetensors metadata scanner, byte-preserving tensor/slice reader, bounded RAM cache, asynchronous prefetch, and runnable correctness-checked miniature MoE.** It is **not yet a GLM-5.3 inference runtime**. It does not implement complete GLM inference; it provides an experimental GLM-style routed FP8 FFN reference (see next section), but not DSA attention, full model numerical parity or native fast FP8 CUDA kernels.
+
+## Experimental real FP8 routed expert and one MoE FFN stage
+
+The repo now has a **single-expert** and **single sparse-FFN-stage** executor,
+both using the *original local safetensors FP8 weights and scales* in bounded
+CPU/GPU float32 tile computation:
+
+```powershell
+py -3 -m pip install -e ".[dev]"
+exactmoe expert-plan "X:\Models\GLM-5.3" --layer 3 --expert 0
+exactmoe expert-smoke "X:\Models\GLM-5.3" --layer 3 --expert 0 --device cpu
+exactmoe layer-smoke "X:\Models\GLM-5.3" --layer 3 --device cpu
+```
+
+These commands require the **original sharded index and only the necessary completed shard files**. `expert-plan` reads the manifest and lists needed filenames without loading any model weights; `expert-smoke` loads only the referenced expert shards. `layer-smoke` first reads the router and then only selected expert/shared-expert shards.
+They do not generate text, run DSA or validate production numeric parity.
+Optional CUDA device is `--device cuda` with a separate CUDA-capable PyTorch
+installation. Full details: [FP8+MoE stage](docs/FP8-EXPERT-EXECUTION.md).
 
 ## Why
 

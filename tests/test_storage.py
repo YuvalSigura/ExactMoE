@@ -67,3 +67,33 @@ def test_fp8_opaque_bytes_preserved(tmp_path: Path):
     rec = next(iter(scan_safetensors(path).values()))
     assert rec.dtype == "F8_E4M3"
     assert read_first_axis_slice(rec, 1) == raw[4:]
+
+
+def test_selective_shard_reader_works_with_missing_other_shards(tmp_path: Path):
+    name = "model.layers.3.mlp.experts.0.gate_proj.weight"
+    save_file({name: np.ones((2, 3), dtype=np.float32)},
+              str(tmp_path / "model-00001-of-00002.safetensors"))
+    # Deliberately never create the other shard, which belongs to other experts.
+    manifest = {
+        "weight_map": {
+            name: "model-00001-of-00002.safetensors",
+            "model.layers.5.mlp.other.weight": "model-00002-of-00002.safetensors",
+        }
+    }
+    (tmp_path / "model.safetensors.index.json").write_text(json.dumps(manifest))
+    files = TensorIndex.shard_plan(tmp_path, [name])
+    assert list(files) == ["model-00001-of-00002.safetensors"]
+    index = TensorIndex.from_selected(tmp_path, [name])
+    assert read_bytes(index[name]) == np.ones((2,3), dtype=np.float32).tobytes()
+    with pytest.raises(FileNotFoundError):
+        TensorIndex.from_directory(tmp_path)
+    with pytest.raises(KeyError):
+        TensorIndex.from_selected(tmp_path, ["missing.tensor"])
+
+
+def test_selective_reader_does_not_accept_unsafe_manifest_path(tmp_path: Path):
+    (tmp_path / "model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": {"bad": "../evil.safetensors"}})
+    )
+    with pytest.raises(ValueError):
+        TensorIndex.shard_plan(tmp_path, ["bad"])

@@ -9,6 +9,7 @@ Implement a disk-backed inference runtime for large MoE checkpoints that preserv
 - `TensorIndex`: scans safetensors file headers and optional sharded `model.safetensors.index.json`. Supports opaque FP8/BF16 tensor metadata without conversion.
 - `read_first_axis_slice`: reads exact contiguous byte ranges of packed tensors in row-major safetensors layout.
 - `ExpertPager`: bounded byte-cache and asynchronous prefetch. Selection is external and authoritative.
+- `DeviceByteCache`: optional PyTorch CPU/CUDA uint8 storage for original bytes, bounded by configured resident-byte budget; it is not an FP8 kernel.
 - `demo`: complete synthetic one-layer float32 MoE test demonstrating equal selected experts and output to an in-memory reference.
 
 ## Planned execution for full model

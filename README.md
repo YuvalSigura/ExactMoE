@@ -68,6 +68,12 @@ Future: faithful GLM-5.3 routing + DSA + KV + sampling
 Reference parity tests
 ```
 
+Optional GPU staging: `exactmoe.device.DeviceByteCache` accepts exact source bytes
+from the pager and uploads them as `torch.uint8` tensors under a configurable
+resident-byte budget. On your RTX 5060 Ti it can demonstrate byte-for-byte
+transfer, **not** correct FP8 matrix multiplication or complete GLM inference.
+Install a CUDA-enabled PyTorch build separately if using this feature.
+
 Current demonstration: synthetic F32 top-k SwiGLU expert FFNs are evaluated using **the same selected expert IDs** in an in-memory dense reference and in the byte-streamed implementation. The demo verifies parity on deterministic inputs and exercises eviction/prefetch behavior. This is a **control-plane proof of concept**, not a quality benchmark for the frontier model.
 
 ## Roadmap and science

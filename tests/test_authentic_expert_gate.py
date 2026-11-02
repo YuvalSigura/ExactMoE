@@ -250,3 +250,15 @@ def test_pager_eviction_keeps_exact_source_bytes(tmp_path):
         assert pager.get(first) == expected
         assert pager.cache.stats().evictions >= 1
         assert pager.cache.stats().resident_bytes <= 40
+
+def test_multiblock_dynamic_activation_quantizer_independent_oracle():
+    from exactmoe.expert_validation import _independent_activation_roundtrip
+    rng = np.random.default_rng(819)
+    vector = rng.normal(0, 0.75, 259).astype(np.float32)
+    vector[0] = 0.
+    vector[129] = -11.5
+    candidate = activation_roundtrip(vector)
+    reference = _independent_activation_roundtrip(vector)
+    np.testing.assert_allclose(candidate, reference, atol=0, rtol=0)
+    assert np.isfinite(candidate).all()
+    assert np.any(np.abs(candidate - vector) > 0)

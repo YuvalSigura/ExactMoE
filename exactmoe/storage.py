@@ -12,6 +12,8 @@ from pathlib import Path
 import struct
 from typing import Any, Iterable
 
+from .glm_catalog import EXPERT_RE
+
 MAX_HEADER_BYTES = 64 * 1024 * 1024
 
 
@@ -152,7 +154,7 @@ class TensorIndex:
         """Candidate tensors, NOT an assertion that their first axis is experts."""
         return [
             t for t in self.tensors.values()
-            if ".experts." in t.name and len(t.shape) >= 2
+            if ".experts." in t.name and EXPERT_RE.fullmatch(t.name) is None and len(t.shape) >= 2
             and t.shape[0] > 1
             and (expected_count is None or t.shape[0] == expected_count)
         ]

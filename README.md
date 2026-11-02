@@ -35,7 +35,7 @@ exactmoe profile --hf zai-org/GLM-5.3
 
 This downloads **only config.json and model.safetensors.index.json**, and reports
 model configuration, shard count, reported weight size and expert-related tensor names.
-It is metadata reconnaissance, not model inference or a real expert layout audit.
+The GLM profile now also audits individually named expert tensors and corresponding inverse-scale entries, producing a metadata-only shard inventory. A passing audit is NOT proof of valid tensor offsets, numerical parity or working inference.
 
 ### Inspect any local safetensors checkpoint (metadata only)
 
@@ -96,3 +96,9 @@ See [ARCHITECTURE](docs/ARCHITECTURE.md), [GLM integration plan](docs/GLM-5.3.md
 - [vLLM GLM-5.3 reference recipe](https://recipes.vllm.ai/zai-org/GLM-5.3)
 
 MIT license for ExactMoE original code. Model weights retain their own license and are not redistributed here.
+
+### Reproducible GLM metadata gate
+
+    exactmoe profile --hf zai-org/GLM-5.3 --revision aca966e4e02791568aa6a4ced368624b3d897f42
+
+Check the expert_layout.metadata_complete field: it must be true before attempting FP8 expert paging. This checks metadata only, not checkpoint data or output quality.

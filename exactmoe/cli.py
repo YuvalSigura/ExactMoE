@@ -19,6 +19,11 @@ def make_parser() -> argparse.ArgumentParser:
     inspect.add_argument("--expected-experts", type=int)
     inspect.add_argument("--show-candidates", type=int, default=0,
                          help="print up to N packed expert candidates (0 disables)")
+    profile = subs.add_parser("profile", help="inspect local or Hugging Face model JSON metadata")
+    group = profile.add_mutually_exclusive_group(required=True)
+    group.add_argument("--local", type=Path, help="directory holding config and index JSON")
+    group.add_argument("--hf", help="Hugging Face repository ID; downloads two JSON files only")
+    profile.add_argument("--revision", help="optional pinned HF revision")
     subs.add_parser("demo", help="run streaming-vs-dense correctness check on tiny synthetic MoE")
     bench = subs.add_parser("bench", help="benchmark tiny synthetic CPU MoE")
     bench.add_argument("--steps", type=int, default=100)
@@ -37,6 +42,13 @@ def main(argv: list[str] | None = None) -> int:
                     :args.show_candidates
                 ]
             ]
+    elif args.command == "profile":
+        from .profile import profile_hf, profile_local
+        if args.revision is not None and args.local is not None:
+            raise SystemExit("--revision can be used only with --hf")
+        result = profile_local(args.local) if args.local else profile_hf(
+            args.hf, revision=args.revision
+        )
     else:
         from .demo import run_demo
         if args.command == "bench" and args.steps < 1:

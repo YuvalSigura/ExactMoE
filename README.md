@@ -25,6 +25,18 @@ exactmoe bench --steps 100
 python -m pytest -q
 ```
 
+### Profile the full GLM checkpoint without downloading 756GB of weights
+
+```bash
+python -m pip install -e ".[research]"
+exactmoe profile --hf zai-org/GLM-5.3
+# For reproducibility, use --revision <commit-sha> when known
+```
+
+This downloads **only config.json and model.safetensors.index.json**, and reports
+model configuration, shard count, reported weight size and expert-related tensor names.
+It is metadata reconnaissance, not model inference or a real expert layout audit.
+
 ### Inspect any local safetensors checkpoint (metadata only)
 
 ```bash

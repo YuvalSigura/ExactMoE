@@ -23,11 +23,12 @@ CPU/GPU float32 tile computation:
 
 ```powershell
 py -3 -m pip install -e ".[dev]"
+exactmoe expert-plan "X:\Models\GLM-5.3" --layer 3 --expert 0
 exactmoe expert-smoke "X:\Models\GLM-5.3" --layer 3 --expert 0 --device cpu
 exactmoe layer-smoke "X:\Models\GLM-5.3" --layer 3 --device cpu
 ```
 
-These commands require a **fully downloaded original GLM-5.3 checkpoint**.
+These commands require the **original sharded index and only the necessary completed shard files**. `expert-plan` reads the manifest and lists needed filenames without loading any model weights; `expert-smoke` loads only the referenced expert shards. `layer-smoke` first reads the router and then only selected expert/shared-expert shards.
 They do not generate text, run DSA or validate production numeric parity.
 Optional CUDA device is `--device cuda` with a separate CUDA-capable PyTorch
 installation. Full details: [FP8+MoE stage](docs/FP8-EXPERT-EXECUTION.md).

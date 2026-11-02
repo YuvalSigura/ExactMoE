@@ -33,6 +33,7 @@ git pull --ff-only origin main
 py -3 -m pip install -e ".[dev]"
 
 # Replace X: with the drive containing the complete official 141-shard checkout.
+py -3 -m exactmoe.cli expert-plan "X:\Models\GLM-5.3" --layer 3 --expert 0
 py -3 -m exactmoe.cli expert-smoke "X:\Models\GLM-5.3" --layer 3 --expert 0 --device cpu
 py -3 -m exactmoe.cli layer-smoke "X:\Models\GLM-5.3" --layer 3 --device cpu
 
@@ -42,8 +43,7 @@ py -3 -m exactmoe.cli layer-smoke "X:\Models\GLM-5.3" --layer 3 --device cuda
 
 For CUDA, first confirm `py -3 -c "import torch; print(torch.cuda.is_available())"`
 is True. **Do not download model weights again for these commands.** They use
-the existing local checkpoint. Every `model.safetensors.index.json` shard path
-must exist; a partial download will fail closed.
+the existing local checkpoint. The manifest and the shard files containing the *requested* tensors must exist. The new selective reader does not require unrelated shards. Incomplete required shards fail closed; files outside the official model root are rejected.
 
 The CLI uses a seeded synthetic *hidden-state vector* to exercise one FFN.
 This vector is NOT a token embedding from a prior GLM layer. The result
@@ -89,3 +89,7 @@ Official model/router reference:
 4. Integrate RMSNorm/residual/DSA and all layer tensor kinds into the executor.
 5. Run a real one-token decoder pass, then 32 tokens with official tokenizer,
    and only then add local serving API and performance optimizations.
+
+### Begin experiments before all 141 shards finish downloading
+
+Run `exactmoe expert-plan <model-dir> --layer 3 --expert 0` after the JSON index arrives. It lists exact **original** shard filenames for all six tensors (3 matrices and 3 scale grids). Once these shard files complete, run `expert-smoke`; it scans only those shard headers. For `layer-smoke`, the CLI first loads router weights and computes the original selected IDs for a deterministic vector, then requires only the selected expert/shared expert shards. Shards are not downloaded by ExactMoE.

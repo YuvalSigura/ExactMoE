@@ -318,6 +318,14 @@ def main(argv=None):
                  seed=args.seed, cap_bytes=args.max_source_mib * 1024 * 1024)
     report["source"]["verification_status"] = source_status
     report["source"]["verification_detail"] = provenance
+    if provenance_file.exists():
+        # Recheck after the entire computation; reject mutation of the sample
+        # between the initial integrity check and final evidence publication.
+        from .expert_acquire import validate_sample
+        validate_sample(args.model_dir, args.layer, args.expert)
+        report["source"]["integrity_rechecked_after_execution"] = True
+    else:
+        report["source"]["integrity_rechecked_after_execution"] = False
     if args.evidence:
         args.evidence.parent.mkdir(parents=True, exist_ok=True)
         args.evidence.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

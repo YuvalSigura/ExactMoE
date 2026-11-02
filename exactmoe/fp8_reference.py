@@ -156,13 +156,9 @@ def block_fp8_matvec(weight: TensorRecord, scale: TensorRecord, vector: Any,
     raise ValueError("device must be cpu or cuda")
 
 
-def forward_expert(index: TensorIndex, layer: int, expert: int, vector: Any,
-                   *, device: str = "cpu", block_size: int = BLOCK) -> dict[str, Any]:
-    """Three native named matrices (gate/up/down) + FP8 scales, one token.
-
-    Does not include the shared expert, router probabilities, residual, attention
-    or reference-logit comparison; deliberately not presented as GLM inference.
-    """
+def expert_values(index: TensorIndex, layer: int, expert: int, vector: Any,
+                  *, device: str = "cpu", block_size: int = BLOCK) -> np.ndarray:
+    """Return routed expert output without router probability or shared expert."""
     if layer < 0 or expert < 0:
         raise ValueError("layer/expert must be nonnegative")
     names = {
@@ -174,35 +170,41 @@ def forward_expert(index: TensorIndex, layer: int, expert: int, vector: Any,
         for part, name in names.items()
     }
     input_vec = np.asarray(vector, dtype=np.float32)
-    start = time.perf_counter()
     gate = block_fp8_matvec(*tensors["gate_proj"], input_vec,
                             block_size=block_size, device=device)
     up = block_fp8_matvec(*tensors["up_proj"], input_vec,
                           block_size=block_size, device=device)
     if gate.shape != up.shape:
-        raise ValueError("gate and up projections disagree on shape")
-    # Stable FP32 SiLU; a reference FP8 runtime may differ in accumulation.
-    # Numerically stable FP32 sigmoid for SwiGLU.
+        raise ValueError("gate and up projection shapes disagree")
     sigmoid = np.where(gate >= 0, 1 / (1 + np.exp(-np.maximum(gate, 0))),
                        np.exp(np.minimum(gate, 0)) / (1 + np.exp(np.minimum(gate, 0))))
     act = (gate * sigmoid * up).astype(np.float32)
     result = block_fp8_matvec(*tensors["down_proj"], act,
                               block_size=block_size, device=device)
-    if result.shape != input_vec.shape:
-        raise ValueError("down projection output dimension mismatch")
-    if not np.isfinite(result).all():
-        raise ValueError("non-finite output")
-    duration = time.perf_counter() - start
+    if result.shape != input_vec.shape or not np.isfinite(result).all():
+        raise ValueError("invalid expert result dimension or finite values")
+    return result
+
+
+def forward_expert(index: TensorIndex, layer: int, expert: int, vector: Any,
+                   *, device: str = "cpu", block_size: int = BLOCK) -> dict[str, Any]:
+    """One expert check, not the whole GLM MoE layer or model."""
+    input_vec = np.asarray(vector, dtype=np.float32)
+    started = time.perf_counter()
+    output = expert_values(index, layer, expert, input_vec,
+                           device=device, block_size=block_size)
+    prefix = f"model.layers.{layer}.mlp.experts.{expert}."
+    weights = [index[prefix + p + ".weight"] for p in ("gate_proj", "up_proj", "down_proj")]
+    scales = [index[w.name + "_scale_inv"] for w in weights]
     return {
-        "passed": True,
-        "scope": "one GLM routed expert only: no original router, shared expert or DSA",
+        "passed": True, "scope": "one routed expert without router/shared expert/DSA",
         "layer": layer, "expert": expert, "device": device,
-        "input_shape": list(input_vec.shape), "intermediate_size": len(gate),
-        "output_shape": list(result.shape),
-        "seconds": round(duration, 4),
-        "source_weight_bytes": sum(t[0].nbytes for t in tensors.values()),
-        "source_scale_bytes": sum(t[1].nbytes for t in tensors.values()),
-        "output_preview": result[:8].tolist(),
+        "input_shape": list(input_vec.shape), "intermediate_size": weights[0].shape[0],
+        "output_shape": list(output.shape),
+        "seconds": round(time.perf_counter() - started, 4),
+        "source_weight_bytes": sum(w.nbytes for w in weights),
+        "source_scale_bytes": sum(s.nbytes for s in scales),
+        "output_preview": output[:8].tolist(),
         "checkpoint_data_unchanged": True,
         "numerical_reference_parity": "not yet independently verified",
     }

@@ -94,19 +94,31 @@ class ExpertCatalog:
                             if len(missing_samples) < 8:
                                 missing_samples.append(f"{layer}/{expert}/{proj}.{kind}")
         sparse_set = set(sparse)
+        mtp_count = config.get("num_nextn_predict_layers", 0)
+        if type(mtp_count) is not int or mtp_count < 0:
+            raise ValueError("invalid num_nextn_predict_layers")
+        mtp_layers = set(range(layers, layers + mtp_count))
+        mtp_instances = sum(layer in mtp_layers for layer, _ in self._catalog)
         unexpected = [
             (layer, expert) for layer, expert in self._catalog
-            if layer not in sparse_set or not 0 <= expert < count
+            if (layer not in sparse_set and layer not in mtp_layers) or not 0 <= expert < count
         ]
         shard_counts = Counter(loc.shard for parts in self._catalog.values() for loc in parts.values())
-        nweights = sum(kind == "weight" for parts in self._catalog.values() for _, kind in parts)
-        nscales = sum(kind == "weight_scale_inv" for parts in self._catalog.values() for _, kind in parts)
+        nweights = sum(
+            kind == "weight" for (layer, _), parts in self._catalog.items()
+            if layer in sparse_set for _, kind in parts
+        )
+        nscales = sum(
+            kind == "weight_scale_inv" for (layer, _), parts in self._catalog.items()
+            if layer in sparse_set for _, kind in parts
+        )
         expected = len(sparse) * count
         return {
             "expert_layout": "individually_named" if self._catalog else "unresolved",
             "sparse_layer_count": len(sparse),
             "expected_expert_instances": expected,
-            "named_expert_instances": len(self._catalog),
+            "named_expert_instances": sum(layer in sparse_set for layer, _ in self._catalog),
+            "mtp_named_expert_instances": mtp_instances,
             "expected_weight_tensors": expected * 3,
             "named_weight_tensors": nweights,
             "expected_scale_tensors": expected * 3 if require_scales else 0,

@@ -80,3 +80,29 @@ def test_bf16_without_scales():
     report = ExpertCatalog(mapping(scales=False)).audit(cfg)
     assert report["metadata_complete"]
     assert not report["requires_scales"]
+
+
+def test_mtp_expert_layer_is_reported_separately():
+    m = mapping()
+    for proj in ("gate_proj", "up_proj", "down_proj"):
+        for kind in ("weight", "weight_scale_inv"):
+            m[f"model.layers.3.mlp.experts.0.{proj}.{kind}"] = "mtp.safetensors"
+    cfg = config()
+    cfg["num_nextn_predict_layers"] = 1
+    result = ExpertCatalog(m).audit(cfg)
+    assert result["metadata_complete"]
+    assert result["named_expert_instances"] == 6
+    assert result["mtp_named_expert_instances"] == 1
+    assert result["unexpected_expert_instances"] == 0
+
+
+def test_named_expert_matrix_does_not_appear_as_packed(tmp_path):
+    import numpy as np
+    from safetensors.numpy import save_file
+    from exactmoe.storage import TensorIndex
+
+    tensor = np.arange(12, dtype=np.float32).reshape((3, 4))
+    name = "model.layers.1.mlp.experts.0.gate_proj.weight"
+    save_file({name: tensor}, str(tmp_path / "model.safetensors"))
+    ix = TensorIndex.from_directory(tmp_path)
+    assert ix.packed_expert_candidates(expected_count=3) == []

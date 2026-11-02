@@ -302,8 +302,22 @@ def main(argv=None):
     args = parser.parse_args(argv)
     index = TensorIndex.from_selected(args.model_dir,
                 [n for pair in names(args.layer, args.expert).values() for n in pair])
+    # Validate provenance BEFORE treating a repacked sample as source-backed.
+    # An existing local shard may still be executed, but without independently
+    # proven revision its report must explicitly say SOURCE_UNATTESTED.
+    provenance_file = args.model_dir / "sample-provenance.json"
+    if provenance_file.exists():
+        from .expert_acquire import validate_sample
+        provenance = validate_sample(args.model_dir, args.layer, args.expert)
+        source_status = "PINNED_HTTPS_RANGE_SAMPLE_HASHED"
+    else:
+        provenance = {"status": "UNATTESTED_LOCAL_SOURCE",
+                      "reason": "No independently verified pinned source provenance was provided"}
+        source_status = "UNATTESTED_LOCAL_SOURCE"
     report = run(index, args.layer, args.expert, mode=args.mode, device=args.device,
                  seed=args.seed, cap_bytes=args.max_source_mib * 1024 * 1024)
+    report["source"]["verification_status"] = source_status
+    report["source"]["verification_detail"] = provenance
     if args.evidence:
         args.evidence.parent.mkdir(parents=True, exist_ok=True)
         args.evidence.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

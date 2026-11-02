@@ -1,5 +1,7 @@
 # Engineering roadmap
 
+**Full operational completion criteria and P0–P11 engineering gates:** [GLM53-END-TO-END-PLAN.md](GLM53-END-TO-END-PLAN.md). A passing M4 manifest audit is not the same as achieving GLM forward inference.
+
 - [x] **M0:** Source repository, package, tests, CI and documented scope.
 - [x] **M1:** Non-materializing metadata scanner for safetensors shards.
 - [x] **M2:** Cross-platform bounded RAM byte-LRU and expert slice paging.

@@ -6,6 +6,8 @@ Read [GLM53 end-to-end execution plan](docs/GLM53-END-TO-END-PLAN.md) and [all c
 
 **Status:** Python paging/control-plane demos and pinned model metadata have been validated. The full model cannot yet produce a token here; the proposed `exactmoe serve` command in the plan is NOT implemented.
 
+**Current development gate:** [bounded authentic FP8 expert acquisition, independent numerical oracle and evidence report](docs/GLM53-AUTHENTIC-EXPERT-GATE.md). Code and synthetic checks exist on the development branch; no original publisher expert payload, production-kernel parity or full-model generation has been validated in this environment.
+
 
 **Preserve the weights. Virtualize the memory. Verify the math.**
 

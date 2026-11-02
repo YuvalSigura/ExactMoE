@@ -128,6 +128,31 @@ def _independent_fp8_decode(bits: np.ndarray) -> np.ndarray:
     return np.where((q & 0x80) != 0, -values, values).astype(np.float32)
 
 
+
+def _independent_activation_roundtrip(x: np.ndarray) -> np.ndarray:
+    """Second implementation: exhaustive nearest-finite FP8 search per K-block.
+
+    Deliberately does not call activation_blocks or the candidate LUT encoder.
+    Used only in the CPU reference, never as the performance backend.
+    """
+    x = np.asarray(x, dtype=np.float32)
+    values = _independent_fp8_decode(np.arange(127, dtype=np.uint8))
+    result = np.empty_like(x)
+    for start in range(0, x.size, 128):
+        chunk = x[start:start + 128]
+        maximum = float(np.max(np.abs(chunk), initial=0.0))
+        inv = np.float32(maximum / 448.0) if maximum else np.float32(1.0)
+        a = np.minimum(np.abs(chunk / inv), 448.0)
+        distances = np.abs(a[:, None] - values[None, :])
+        minima = distances.min(axis=1, keepdims=True)
+        # Tie-breaking prioritizes even encoding (LSB==0), then lower code.
+        preference = (np.arange(127) & 1) * 127 + np.arange(127)
+        codes = np.argmin(np.where(distances == minima, preference[None, :], 1000000), axis=1)
+        codes = codes.astype(np.uint8) | np.where(np.signbit(chunk), 128, 0).astype(np.uint8)
+        result[start:start + chunk.size] = _independent_fp8_decode(codes) * inv
+    return result
+
+
 def oracle_matvec(weight, scale, x: np.ndarray) -> np.ndarray:
     """Independent dense NumPy oracle; intentionally unlike bounded streaming.
 
@@ -158,7 +183,7 @@ def _forward(index, layer, expert, x, *, mode, device, oracle=False):
     def mv(which, v):
         w, s = (index[n] for n in spec[which])
         if mode == "dynamic-candidate":
-            v = activation_roundtrip(v)
+            v = _independent_activation_roundtrip(v) if oracle else activation_roundtrip(v)
         return oracle_matvec(w, s, v) if oracle else block_fp8_matvec(w, s, v, device=device)
     gate, up = mv("gate_proj", x), mv("up_proj", x)
     product = (_silu(gate) * up).astype(np.float32)

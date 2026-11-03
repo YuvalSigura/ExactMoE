@@ -241,3 +241,72 @@ This read-only profiler creates a **local** hardware report under
 `artifacts/hardware/ai-platform.json`. Hardware capability is not runtime
 model support. See [Core Ultra 265KF design](docs/CORE-ULTRA-265KF.md) for
 a proposed work partition and strict same-quality validation criteria.
+
+---
+
+## Research-backed ideas for approximating full GLM-5.3 on 16 GB VRAM + 128 GB RAM
+
+The sections above keep the original ExactMoE invariants (byte-preserving streaming of the *unmodified* checkpoint). The ideas below come from the conversation about making the **full** 753 B GLM-5.3 usable for cybersecurity / vulnerability research on the target machine. They are *optional performance / specialization lanes*. They must never be presented as evidence that the original model has been run.
+
+### Core observations from the literature and recent releases
+
+- **Extreme low-bit quantization** (1–2.25 bpw) can retain high task scores on large MoEs. ISTA-DASLab published GSQ-RCO GGUFs of a ~763 B DeepSeek-V4.1-Flash that match the base model on AIME25 / GPQA / LiveCodeBench at 2.00 bpw and stay within ~1.3 % at 1.75 bpw. Ternary (1.58-bit) and 1-bit work (BitNet b1.58, Bonsai, etc.) show the same trend at smaller scales.
+- **Expert pruning / domain specialization** can remove 50 % of experts with limited damage on the target domain. ISTA-DASLab’s Coder build deletes half the experts of DeepSeek-V4.1-Flash and still keeps ~95 % of SWE-bench. Papers on EASY-EP, DERN, MoNE and few-shot expert localization confirm that routers are highly skewed and that domain calibration data lets you keep the specialists.
+- **Token-level / dynamic precision** (PagedMoE arXiv:2611.03173, DPA-MoE, DynaExq, DyMoE) stores each expert once and fetches only the bit-planes required by the current router score, targeting ~2.5 bpw average while approaching INT4 quality.
+- **Hybrid offloading runtimes** already exist: Colibri, FreeToken, KTransformers, Swap-MoE, Project Maya. They keep hot experts in VRAM/RAM and stream the rest from NVMe. None of them currently holds the full 753 B model comfortably in 128 GB, but they are the practical substrate.
+- **Multi-model routing** (“Cyber Model Orchestra”) — route discovery/triage to fast 9–14 B models, deep analysis to a pruned+quantized Flash-class model, and only the hardest exploit-chaining steps to the full model (or its API). This is the most realistic way to get *most* of GLM-5.3’s cyber capability on the given hardware today.
+
+### New planning tools added in this update
+
+Four pure-Python modules implement the ideas as *simulators and planners*. They do not download weights, do not run GLM, and do not modify checkpoints. They exist so that later real implementations can be measured against a clear baseline.
+
+| Tool | Purpose | Research basis |
+|------|---------|----------------|
+| `exactmoe expert-profile` | Frequency ranking of (layer, expert) pairs from a routed trace | EASY-EP, DERN, Black Sheep AI pruning studies |
+| `exactmoe plan-pruning` | Keep/drop mask at a target retention fraction | ISTA-DASLab 50 % expert deletion, domain pruning papers |
+| `exactmoe dynamic-precision` | Assign 1–8 bits per demand to hit a target average | PagedMoE, DPA-MoE, DynaExq |
+| `exactmoe route-phase` | Recommend a model tier for a task phase | Multi-model / hybrid routing discussion |
+
+### Recommended order of use
+
+1. **Obtain a real routed-expert trace** (or start with the synthetic one in `docs/experiments/`).
+   A captured trace must declare `source_kind: "captured"` and a checkpoint SHA-256. The tools never authenticate it.
+2. **Profile**
+   ```powershell
+   exactmoe expert-profile --trace path/to/trace.json > profile.json
+   ```
+   Check that the hottest experts dominate (expected for MoE). If the distribution is almost uniform, the trace is probably not representative.
+3. **Plan pruning** (optional specialization lane)
+   ```powershell
+   exactmoe plan-pruning --profile profile.json --keep-fraction 0.5 --min-keep 8 > pruning_plan.json
+   ```
+   The plan is only a candidate. Any real pruned checkpoint must be re-validated on CyberGym / ExploitGym / SWE-bench style tasks against the original model.
+4. **Simulate dynamic precision**
+   ```powershell
+   exactmoe dynamic-precision --trace path/to/trace.json --target-avg-bits 2.5
+   ```
+   Confirm the achieved average is close to the target. This is a frequency proxy; real systems use router scores + offline error profiles.
+5. **Decide the routing policy**
+   ```powershell
+   exactmoe route-phase deep_analysis --difficulty 0.6
+   exactmoe route-phase exploit_chain --difficulty 0.9 --no-prefer-local
+   ```
+6. **Run the existing ExactMoE gates** (traffic_sim, streamed_fp8, expert-smoke, layer-smoke) on any concrete implementation you later build. They remain the correctness baseline.
+
+### How to know the tools themselves are working
+
+```powershell
+python -m pip install -e ".[dev]"
+python -m pytest -q tests/test_expert_tools.py tests/test_traffic_sim.py
+```
+
+All tests must pass. They exercise the synthetic trace, reject invalid inputs, and check that the reported status fields stay `*_ONLY` / `SIMULATION_ONLY`. If a future change makes a tool claim it executed the real model, the tests will fail.
+
+### What is still missing for a real full-GLM-5.3 run
+
+- A verified original-router trace from the pinned GLM-5.3 checkpoint.
+- An implementation of one of the dynamic-precision or pruning schemes that preserves the official router (or documents the exact router change).
+- Integration with a streaming runtime (Colibri / FreeToken / KTransformers / Swap-MoE) that can hold the resulting resident set inside 16 GB VRAM + 128 GB RAM + fast NVMe.
+- End-to-end numerical and task parity tests against a reference full-precision run (the primary gate of this repository).
+
+Until those exist, the tools above are planning aids only. The primary ExactMoE path remains byte-preserving streaming of the unmodified checkpoint.

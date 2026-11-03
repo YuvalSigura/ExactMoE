@@ -33,6 +33,16 @@ python -m exactmoe.traffic_sim --trace docs/experiments/traffic_synthetic.json -
 python -m pytest -q tests/test_traffic_sim.py
 ```
 
+### Bounded original-byte streaming — added in this branch
+
+`exactmoe.streaming.stream_record` reads a single indexed safetensors tensor/range in small byte-exact chunks, preserving original bytes and refusing out-of-range or oversized requests. It records a SHA-256 digest, optionally enforces an expected digest, and checks whether source file metadata changed while reading. **A sink must quarantine all received bytes until a successful receipt is returned; this is not a complete cryptographic file-authenticity service.** Inspired by Kimi's SSD-first approach, but newly written for ExactMoE's existing `TensorRecord` and independent of Kimi's MXFP4 kernels.
+
+```powershell
+python -m pytest -q tests/test_streaming.py
+```
+
+This is genuine bounded file I/O on a named tensor range, **not** original GLM-5.3 execution, CUDA staging, or a physical SSD throughput benchmark.
+
 **Milestone sequence:** authenticate one actual original expert → independent FP8 numeric oracle → correct router/shared MoE stage → all 78 layers + DSA/MLA + full token → measure native SSD/RAM/VRAM traffic → proven performance optimization → 32-token acceptance → local streaming/tool-capable API. Full details and per-stage negative tests are in the [adaptation plan](docs/UPSTREAM_ADAPTATION_PLAN.md). **Current status: simulated/coded components exist; authentic real-expert parity and full model generation are not yet proven.**
 
 ---

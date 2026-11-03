@@ -111,6 +111,12 @@ python -m pytest -q tests/test_traffic_sim.py
 
 The included fixture is artificial and cannot prove GLM routing locality. To migrate to real captures in a separate PR, record per-token, per-layer routed expert IDs and exact tensor byte sizes from the **unchanged official router**. Include checkpoint model/revision SHA, process configuration, token IDs, request workload and lineage, with a signed evidence digest. Reject partial/unknown provenance and do not expose prompts, secrets or model weights.
 
+### Additional original implementation: bounded tensor-range streaming
+
+`exactmoe/streaming.py` consumes existing safetensors `TensorRecord` objects using a single open file handle and a strict maximum buffer per read. It supports checked subranges, SHA-256 integrity receipts and source metadata-change detection. `tests/test_streaming.py` probes corruption, short/truncated files, invalid request bounds and caller failure. This is **not a copy of Kimi C code** and is not a GLM-native expert decoder. The consumer must discard/quarantine delivered chunks if the final digest or source check fails; no validity guarantee exists until a completed receipt.
+
+A full native path still needs measured async/coalesced disk I/O, proper CPU/GPU staging, original FP8 scales and independent kernel parity; a Python chunk loop is a controlled data-source building block only.
+
 ## 6. What not to do
 
 * Do not vendor the whole Strata repository (thousands of files, multiple architectures/backends) or wholesale-merge Maya's divergent `generate.cpp` or `serve/server.py`. Select coherent components, copy only after license audit, and compile/verify in isolation.

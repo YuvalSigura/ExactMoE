@@ -32,7 +32,7 @@ def validate_trace(trace: Any) -> tuple[list[tuple[tuple[int, int, int], ...]], 
     "events":[{"token":0,"experts":[{"layer":3,"expert":42,"weight_bytes":123}]}]}.
     Each event is one target-model token position; IDs cannot be rescheduled.
     """
-    if not isinstance(trace, dict) or trace.get("schema_version") != 1:
+    if not isinstance(trace, dict) or type(trace.get("schema_version")) is not int or trace.get("schema_version") != 1:
         raise ValueError("unsupported trace schema (expected integer schema_version=1)")
     kind = trace.get("source_kind")
     if kind not in ("synthetic", "captured"):
@@ -88,6 +88,7 @@ def simulate(trace: dict[str, Any], cache_bytes: int, policy: str = "lru") -> di
     frequency: Counter[tuple[int, int]] = Counter()
     last_touch: dict[tuple[int, int], int] = {}
     hits = misses = evictions = bypass = read_bytes = demand_bytes = peak = 0
+    resident_total = 0
     clock = 0
     for token in tokens:
         for layer, expert, size in token:
@@ -105,22 +106,23 @@ def simulate(trace: dict[str, Any], cache_bytes: int, policy: str = "lru") -> di
             if policy == "none" or size > cache_bytes or cache_bytes == 0:
                 bypass += 1
                 continue
-            if policy == "lfu" and resident and sum(resident.values()) + size > cache_bytes:
+            if policy == "lfu" and resident and resident_total + size > cache_bytes:
                 # The novel entry must be more valuable than the least used resident.
                 # Equality retains the resident, avoiding churn on single-use entries.
                 lowest = min(resident, key=lambda k: (frequency[k], last_touch[k]))
                 if frequency[key] <= frequency[lowest]:
                     bypass += 1
                     continue
-            while resident and sum(resident.values()) + size > cache_bytes:
+            while resident and resident_total + size > cache_bytes:
                 if policy == "lru":
                     victim = next(iter(resident))
                 else:
                     victim = min(resident, key=lambda k: (frequency[k], last_touch[k]))
-                resident.pop(victim)
+                resident_total -= resident.pop(victim)
                 evictions += 1
             resident[key] = size
-            peak = max(peak, sum(resident.values()))
+            resident_total += size
+            peak = max(peak, resident_total)
     canonical = json.dumps(trace, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
     return {
         "status": "SIMULATION_ONLY",

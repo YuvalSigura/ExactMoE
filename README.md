@@ -310,3 +310,39 @@ All tests must pass. They exercise the synthetic trace, reject invalid inputs, a
 - End-to-end numerical and task parity tests against a reference full-precision run (the primary gate of this repository).
 
 Until those exist, the tools above are planning aids only. The primary ExactMoE path remains byte-preserving streaming of the unmodified checkpoint.
+
+### Real expert splitting (weight transformation)
+
+The tools above are planners. The following module performs an **actual mathematical split** of one SwiGLU expert into N smaller experts by partitioning the intermediate dimension.
+
+This is the concrete implementation of the idea “turn the fat expert into several smaller experts and use the right one”.
+
+```powershell
+# Split a synthetic expert of intermediate=16384, hidden=6144 into 4 sub-experts
+exactmoe split-expert --intermediate 16384 --hidden 6144 --splits 4 --seed 0
+
+# Optionally save the sliced weight arrays
+exactmoe split-expert --splits 4 --save-arrays sub_experts.npz
+```
+
+What the code does:
+- Takes gate/up of shape `(intermediate, hidden)` and down of shape `(hidden, intermediate)`
+- Cuts the intermediate axis into contiguous chunks
+- Returns N new experts whose intermediate sizes sum exactly to the original
+- Reconstructs the original matrices bit-exactly when the chunks are concatenated (verified by tests)
+
+What it does **not** do:
+- Modify a real GLM-5.3 checkpoint
+- Update the router (you must decide how tokens are routed to the new sub-experts)
+- Evaluate quality loss
+
+```powershell
+python -m pytest -q tests/test_expert_splitter.py
+```
+
+After a real split you would:
+1. Replace the original expert with the N sub-experts in the model definition.
+2. Adjust the router (or add a second-level router) so that it can select among the sub-experts.
+3. Re-validate numerical outputs and task performance against the unsplit original expert.
+
+This remains an optional specialization path. The primary ExactMoE invariant (byte-preserving streaming of the unmodified checkpoint) is unchanged.

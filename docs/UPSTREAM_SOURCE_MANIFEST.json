@@ -1,0 +1,206 @@
+{
+  "schema_version": 1,
+  "status": "REVIEWED_SOURCE_INVENTORY_NOT_PORTED",
+  "audited_utc_date": "2026-11-03",
+  "target": {
+    "repository": "YuvalSigura/ExactMoE",
+    "branch": "feat/strata-maya-runtime-adaptation-20261103",
+    "base_commit": "c779e3eb3b57b8e01ebda8c6416d80d85a72972d",
+    "model": "zai-org/GLM-5.3",
+    "model_revision": "aca966e4e02791568aa6a4ced368624b3d897f42",
+    "original_weights": "FP8 E4M3 blockwise + original inverse scales",
+    "safety": "no model weights or binary artifacts committed"
+  },
+  "sources": [
+    {
+      "repository": "Niko1221/Strata",
+      "revision": "ffa80d73133ea5c548aefe57889a16e8085a938f",
+      "license": "MIT",
+      "root_license": "LICENSE",
+      "status": "SOURCE_REVIEW_ONLY",
+      "areas": [
+        {
+          "source_files": [
+            "include/strata/core/expert_cache.hpp",
+            "src/core/expert_cache.cpp"
+          ],
+          "destination": "future exactmoe/native/expert_cache",
+          "reuse": "policy and VRAM hot-set design; CPU/GPU overlap",
+          "port_requirements": [
+            "verified bounded resident accounting",
+            "deterministic cache policy test",
+            "no target router changes"
+          ]
+        },
+        {
+          "source_files": [
+            "include/strata/core/expert_source.hpp",
+            "src/core/expert_source.cpp"
+          ],
+          "destination": "future exactmoe/native/byte_source",
+          "reuse": "tiered expert source contract",
+          "port_requirements": [
+            "real SSD-first mode under 128 GiB RAM",
+            "safetensors FP8 scale/offset parity"
+          ]
+        },
+        {
+          "source_files": [
+            "src/program/generate.cpp",
+            "src/split/src/engine.cu",
+            "src/split/src/moe.cuh"
+          ],
+          "destination": "future exactmoe/native/decoder",
+          "reuse": "scheduler and multi-token verification concepts only",
+          "port_requirements": [
+            "full GLM DSA and FP8 math port",
+            "sm_120 CUDA build probe",
+            "reference tests"
+          ]
+        },
+        {
+          "source_files": [
+            "serve/server.py"
+          ],
+          "destination": "future exactmoe/server",
+          "reuse": "OpenAI/Anthropic API semantics as reference",
+          "port_requirements": [
+            "loopback and tool-call conformance",
+            "no external inference fallback"
+          ]
+        }
+      ]
+    },
+    {
+      "repository": "mw00/project-maya",
+      "revision": "10e69a0eb11541004abb24f9fa47147e9002326f",
+      "license": "MIT",
+      "root_license": "LICENSE",
+      "status": "SOURCE_REVIEW_ONLY",
+      "model_implemented": "GLM-5.3-Flash; not GLM-5.3 full",
+      "areas": [
+        {
+          "source_files": [
+            "docs/GLM5-FLASH.md",
+            "src/core/glm_model.cu",
+            "src/core/glm_window.cu",
+            "src/core/glm_prefill.cu",
+            "src/core/glm_rows.cu"
+          ],
+          "destination": "future exactmoe/native/glm_adapter",
+          "reuse": "GLM family decoder staging / GPU graph patterns",
+          "port_requirements": [
+            "78 vs 45 layer contract",
+            "256 vs 288 experts",
+            "full GLM MLA/index-share DSA parity"
+          ]
+        },
+        {
+          "source_files": [
+            "src/core/glm_mtp.cu",
+            "src/core/expert_source.cpp",
+            "src/core/expert_cache.cpp"
+          ],
+          "destination": "future exactmoe/native/execution_and_paging",
+          "reuse": "GLM MTP and cache layout patterns",
+          "port_requirements": [
+            "original full checkpoint FP8",
+            "end-to-end correct verification algorithm",
+            "license and ABI review"
+          ]
+        },
+        {
+          "source_files": [
+            "serve/server.py"
+          ],
+          "destination": "future exactmoe/server",
+          "reuse": "model-specific tokenization and tool-call behavior study",
+          "port_requirements": [
+            "full original model identity",
+            "local-only endpoint"
+          ]
+        }
+      ]
+    },
+    {
+      "repository": "FareedKhan-dev/kimi-k3-in-c",
+      "revision": "81bb6c23ccee2154bc35cad922588ab66494a9a9",
+      "license": "Apache-2.0",
+      "root_license": "LICENSE",
+      "root_notice": "NOTICE",
+      "status": "SOURCE_REVIEW_ONLY",
+      "model_implemented": "Kimi K3 MXFP4; NOT GLM-5.3 original FP8",
+      "areas": [
+        {
+          "source_files": [
+            "src/io/k3_st.c",
+            "src/io/k3_load.c"
+          ],
+          "destination": "future exactmoe/native/io",
+          "reuse": "fail-closed native safetensors and coalesced original byte reads",
+          "port_requirements": [
+            "FP8 E4M3 metadata/scale blocks",
+            "Windows I/O handling",
+            "safetensors source consistency",
+            "retain Apache NOTICE if copied"
+          ]
+        },
+        {
+          "source_files": [
+            "src/io/k3_trunk.c"
+          ],
+          "destination": "future exactmoe/native/stream",
+          "reuse": "bounded dense trunk ring/pinned-prefix memory strategy",
+          "port_requirements": [
+            "full GLM dense architecture mapping",
+            "time and peak RAM traces"
+          ]
+        },
+        {
+          "source_files": [
+            "src/cache/k3_cache.c",
+            "tools/sim_cache.py",
+            "docs/data/expert-cache-capacity.txt"
+          ],
+          "destination": "exactmoe/traffic_sim.py and future native cache",
+          "reuse": "replay of recorded expert demand; avoid memory-size-only hypotheses",
+          "port_requirements": [
+            "never rely on offline Belady for production",
+            "obtain real GLM original-router traces",
+            "distinguish re-prefill from incremental decode"
+          ]
+        },
+        {
+          "source_files": [
+            "src/core/k3_ops.c"
+          ],
+          "destination": null,
+          "reuse": "NOT DIRECTLY REUSABLE",
+          "port_requirements": [
+            "MXFP4 native Kimi ops do not match GLM FP8/DSA"
+          ]
+        }
+      ]
+    }
+  ],
+  "licensing": {
+    "current_branch_vendors_external_code": false,
+    "current_branch_original_code_only": true,
+    "require_vendor_receipts": [
+      "source commit SHA",
+      "relative file path",
+      "copyright notice",
+      "license",
+      "modification summary",
+      "test suite",
+      "numerical oracle"
+    ],
+    "requires_separate_dflash_weights_license_check": true
+  },
+  "claims": {
+    "simulator": "synthetic CPU only; not real IO",
+    "pr18": "synthetic expert data / CI only; no authentic full model proof",
+    "upstream_benchmarks": "upstream measurements only",
+    "original_glm_full_inference": "NOT_IMPLEMENTED"
+  }
+}

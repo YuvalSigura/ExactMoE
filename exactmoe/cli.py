@@ -74,6 +74,28 @@ def make_parser() -> argparse.ArgumentParser:
     subs.add_parser("demo", help="run streaming-vs-dense correctness check on tiny synthetic MoE")
     bench = subs.add_parser("bench", help="benchmark tiny synthetic CPU MoE")
     bench.add_argument("--steps", type=int, default=100)
+
+    # --- New planning / research tools (simulation only) ---
+    ep = subs.add_parser("expert-profile", help="profile expert activation frequency from a routed trace")
+    ep.add_argument("--trace", required=True, type=Path)
+
+    dp = subs.add_parser("dynamic-precision", help="simulate token-level dynamic bit allocation")
+    dp.add_argument("--trace", required=True, type=Path)
+    dp.add_argument("--target-avg-bits", type=float, default=2.5)
+    dp.add_argument("--min-bits", type=int, default=1)
+    dp.add_argument("--max-bits", type=int, default=8)
+
+    mr = subs.add_parser("route-phase", help="Cyber Model Orchestra style phase recommendation")
+    mr.add_argument("phase", choices=("discovery", "triage", "deep_analysis", "exploit_chain", "verification"))
+    mr.add_argument("--difficulty", type=float, default=0.5)
+    mr.add_argument("--prefer-local", action="store_true", default=True)
+    mr.add_argument("--no-prefer-local", dest="prefer_local", action="store_false")
+
+    pp = subs.add_parser("plan-pruning", help="plan keep/drop sets from an expert profile JSON")
+    pp.add_argument("--profile", required=True, type=Path)
+    pp.add_argument("--keep-fraction", type=float, default=0.5)
+    pp.add_argument("--min-keep", type=int, default=4)
+
     return parser
 
 
@@ -162,6 +184,26 @@ def main(argv: list[str] | None = None) -> int:
         result = forward_moe_ffn(index, args.layer, x, config,
                                  device=args.device, block_size=args.block_size)
         result["input_seed"] = args.seed
+    elif args.command == "expert-profile":
+        from .expert_profiler import profile_experts
+        payload = json.loads(args.trace.read_text(encoding="utf-8"))
+        result = profile_experts(payload)
+    elif args.command == "dynamic-precision":
+        from .dynamic_precision import allocate_precision
+        payload = json.loads(args.trace.read_text(encoding="utf-8"))
+        result = allocate_precision(
+            payload,
+            target_avg_bits=args.target_avg_bits,
+            min_bits=args.min_bits,
+            max_bits=args.max_bits,
+        )
+    elif args.command == "route-phase":
+        from .multi_model_router import route_phase
+        result = route_phase(args.phase, args.difficulty, args.prefer_local)
+    elif args.command == "plan-pruning":
+        from .pruning_planner import plan_pruning
+        payload = json.loads(args.profile.read_text(encoding="utf-8"))
+        result = plan_pruning(payload, args.keep_fraction, args.min_keep)
     else:
         from .demo import run_demo
         if args.command == "bench" and args.steps < 1:

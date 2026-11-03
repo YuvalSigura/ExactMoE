@@ -7,6 +7,8 @@ No pickle, arbitrary Python execution, or tensor conversions are involved here.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import contextmanager
+from contextvars import ContextVar
 import json
 from pathlib import Path
 import struct
@@ -36,6 +38,27 @@ class TensorRecord:
             raise ValueError(f"{self.name}: non-byte-aligned first-axis slice")
         width = self.nbytes // self.shape[0]
         return self.start + index * width, width
+
+
+@dataclass
+class ReadCounter:
+    """Logical source reads during a single experiment; not physical SSD I/O."""
+    bytes: int = 0
+    calls: int = 0
+
+
+_ACTIVE_READ_COUNTER: ContextVar[ReadCounter | None] = ContextVar("exactmoe_source_reads", default=None)
+
+
+@contextmanager
+def meter_reads():
+    """Count exact successful source read() bytes, scoped to the calling context."""
+    counter = ReadCounter()
+    token = _ACTIVE_READ_COUNTER.set(counter)
+    try:
+        yield counter
+    finally:
+        _ACTIVE_READ_COUNTER.reset(token)
 
 
 def _no_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict:
@@ -240,6 +263,10 @@ def read_bytes(record: TensorRecord, offset: int = 0, length: int | None = None)
         data = f.read(length)
     if len(data) != length:
         raise EOFError(f"short read for {record.name}: got {len(data)} / {length}")
+    counter = _ACTIVE_READ_COUNTER.get()
+    if counter is not None:
+        counter.bytes += len(data)
+        counter.calls += 1
     return data
 
 

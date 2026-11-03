@@ -1,0 +1,50 @@
+{
+  "schema": "exactmoe.synthetic-expert-evidence.v1",
+  "date": "2026-11-02",
+  "status": "SYNTHETIC_ONLY_NOT_AUTHENTIC_GLM53",
+  "fixture": {
+    "six_named_tensors": true,
+    "source_payload_bytes": 117,
+    "pinned_revision_field": "aca966e4e02791568aa6a4ced368624b3d897f42",
+    "remote_hf_access": "mock_injected",
+    "original_checkpoint_weights_used": false
+  },
+  "validation_environment": {
+    "direct_github_checkout": false,
+    "existing_repo_core": "contract-equivalent local copies",
+    "python": "3.13",
+    "cuda_available": false
+  },
+  "runs": {
+    "dequant-f32": {
+      "pass_internal_oracle": true,
+      "candidate_wall_seconds": 0.0004566869999962364,
+      "oracle_wall_seconds": 0.0005925210000441439,
+      "process_rss_peak_sampled_bytes": 107655168,
+      "logical_candidate_read_bytes": 117,
+      "candidate_read_calls": 6,
+      "output_max_abs_error": 0,
+      "output_sha256": "e2e8de496e50352a3e2a69eac8708933f492306e8c16db2e92b80d04ca1318e1"
+    },
+    "dynamic-candidate": {
+      "pass_internal_oracle": true,
+      "candidate_wall_seconds": 0.000679282000078274,
+      "oracle_wall_seconds": 0.0011011560000042664,
+      "process_rss_peak_sampled_bytes": 107794432,
+      "logical_candidate_read_bytes": 117,
+      "candidate_read_calls": 6,
+      "output_max_abs_error": 0,
+      "output_sha256": "c75bb27ac01fb6ac2da9d55510abbcf89c5d98832846c57195b0b115f85881c6"
+    }
+  },
+  "limitations": [
+    "Not official GLM source bytes",
+    "Not benchmark on RTX 5060 Ti",
+    "Not full 78-layer inference",
+    "Official FP8 kernel parity NOT_TESTED",
+    "CPU RSS is process baseline-inclusive and sampling can miss transients",
+    "Physical SSD read bytes NOT_MEASURED",
+    "No GPU VRAM measurement",
+    "Values from local shim suite, not full repository regression run"
+  ]
+}

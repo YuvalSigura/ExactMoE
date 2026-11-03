@@ -1,5 +1,7 @@
 # P4/P5 experimental original-FP8 expert and routed MoE FFN executor
 
+**Next bounded source-and-parity gate:** [GLM-5.3 authentic expert engineering report](GLM53-AUTHENTIC-EXPERT-GATE.md). This adds capped original-tensor Range extraction, byte/provenance checks, instrumented logical reads, an independent numerical oracle and an opt-in dynamic-activation candidate. The production FP8 kernel and authentic-source parity remain blocked until measured; the existing P4/P5 operations below are not replaced.
+
 **Status:** implemented a single routed expert and sparse MoE FFN computation
 from local unmodified GLM-5.3 FP8 checkpoint bytes, with tiny independent
 numerical test fixtures. It has NOT generated a token from GLM-5.3. Full DSA,

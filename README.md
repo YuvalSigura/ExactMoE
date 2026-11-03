@@ -43,6 +43,18 @@ python -m pytest -q tests/test_streaming.py
 
 This is genuine bounded file I/O on a named tensor range, **not** original GLM-5.3 execution, CUDA staging, or a physical SSD throughput benchmark.
 
+### New: bounded FP8 expert execution from single-open weight streams
+
+A new **CPU-only calculation**, `exactmoe.streamed_fp8`, processes an existing original-shaped six-tensor GLM-5.3 FP8 expert directly from indexed safetensors bytes. It performs gate/up/down + SwiGLU in bounded row groups, verifies per-tensor SHA-256 commitments (when provided), and returns output **only after all required streams are complete**. This is the first use of the new SSD-streaming layer for actual FP8 arithmetic; the previous expert reference is retained as a separate comparison path.
+
+```powershell
+python -m pytest -q tests/test_streamed_fp8.py
+# Requires a separately authorized local, verified PR #18 six-tensor sample:
+python -m exactmoe.streamed_fp8 "D:\\AI\\glm53-expert3-0" --layer 3 --expert 0 --check-local-oracle
+```
+
+Read [the honest execution status, source-provenance requirements and local test protocol](docs/GLM53-STREAMED-EXPERT-EXECUTION.md). These are **CPU synthetic/one-expert gates**: not publisher FP8 TensorCore parity, not GLM's DSA/MLA decoder, not 78-layer inference, not a measured SSD transfer rate, and not Harness-ready service.
+
 **Milestone sequence:** authenticate one actual original expert → independent FP8 numeric oracle → correct router/shared MoE stage → all 78 layers + DSA/MLA + full token → measure native SSD/RAM/VRAM traffic → proven performance optimization → 32-token acceptance → local streaming/tool-capable API. Full details and per-stage negative tests are in the [adaptation plan](docs/UPSTREAM_ADAPTATION_PLAN.md). **Current status: simulated/coded components exist; authentic real-expert parity and full model generation are not yet proven.**
 
 ---

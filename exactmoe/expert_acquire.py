@@ -25,7 +25,7 @@ MAX_HEADER = 16 * 1024 * 1024
 MAX_JSON = 32 * 1024 * 1024
 MAX_RANGE = 16 * 1024 * 1024
 CR = re.compile(r"^bytes (\d+)-(\d+)/(\d+)$")
-DTYPE_BYTES = {"F8_E4M3": 1, "F32": 4}
+DTYPE_BYTES = {"F8_E4M3": 1, "F32": 4, "BF16": 2}
 
 
 class _HTTPSRedirect(HTTPRedirectHandler):
@@ -121,7 +121,7 @@ def _validate_entry(name: str, entry: dict, expected_shape=None):
     shape = entry["shape"]
     offs = entry.get("data_offsets")
     dtype = entry.get("dtype")
-    if len(shape) != 2 or any(type(i) is not int or i <= 0 for i in shape):
+    if not shape or any(type(i) is not int or i <= 0 for i in shape):
         raise ValueError(f"incorrect tensor shape: {name}")
     if dtype not in DTYPE_BYTES or not isinstance(offs, list) or len(offs) != 2 or any(type(i) is not int for i in offs):
         raise ValueError(f"incorrect tensor type/offset: {name}")

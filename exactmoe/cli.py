@@ -75,7 +75,7 @@ def make_parser() -> argparse.ArgumentParser:
     bench = subs.add_parser("bench", help="benchmark tiny synthetic CPU MoE")
     bench.add_argument("--steps", type=int, default=100)
 
-    # --- New planning / research tools (simulation only) ---
+    # --- New planning / research tools ---
     ep = subs.add_parser("expert-profile", help="profile expert activation frequency from a routed trace")
     ep.add_argument("--trace", required=True, type=Path)
 
@@ -95,6 +95,17 @@ def make_parser() -> argparse.ArgumentParser:
     pp.add_argument("--profile", required=True, type=Path)
     pp.add_argument("--keep-fraction", type=float, default=0.5)
     pp.add_argument("--min-keep", type=int, default=4)
+
+    # Real expert splitting (weight transformation)
+    es = subs.add_parser(
+        "split-expert",
+        help="split one SwiGLU expert into N smaller experts by intermediate dimension",
+    )
+    es.add_argument("--intermediate", type=int, default=16384)
+    es.add_argument("--hidden", type=int, default=6144)
+    es.add_argument("--splits", type=int, default=4)
+    es.add_argument("--seed", type=int, default=0)
+    es.add_argument("--save-arrays", type=Path, help="optional .npz path to store the sliced weights")
 
     return parser
 
@@ -204,6 +215,24 @@ def main(argv: list[str] | None = None) -> int:
         from .pruning_planner import plan_pruning
         payload = json.loads(args.profile.read_text(encoding="utf-8"))
         result = plan_pruning(payload, args.keep_fraction, args.min_keep)
+    elif args.command == "split-expert":
+        from .expert_splitter import split_expert
+        import numpy as np
+        rng = np.random.default_rng(args.seed)
+        gate = rng.normal(0, 0.02, (args.intermediate, args.hidden)).astype(np.float32)
+        up = rng.normal(0, 0.02, (args.intermediate, args.hidden)).astype(np.float32)
+        down = rng.normal(0, 0.02, (args.hidden, args.intermediate)).astype(np.float32)
+        full = split_expert(gate, up, down, args.splits, name="synthetic_expert")
+        result = {k: v for k, v in full.items() if k != "_arrays"}
+        if args.save_arrays:
+            arrays = {}
+            for se in full["_arrays"]:
+                prefix = f"sub{se['sub_id']}"
+                arrays[f"{prefix}_gate"] = se["gate"]
+                arrays[f"{prefix}_up"] = se["up"]
+                arrays[f"{prefix}_down"] = se["down"]
+            np.savez(args.save_arrays, **arrays)
+            result["saved_arrays"] = str(args.save_arrays)
     else:
         from .demo import run_demo
         if args.command == "bench" and args.steps < 1:

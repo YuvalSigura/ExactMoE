@@ -19,6 +19,16 @@
 >
 > Full status: [docs/STATUS-2026-11-04.md](docs/STATUS-2026-11-04.md)
 
+## Research direction: tiered expert scheduling (proposal)
+
+**Goal:** investigate bounded **SSD ↔ RAM ↔ VRAM** expert residency and **CPU/GPU execution placement** for the **full original GLM-5.3 FP8 model** on the 16 GiB RTX 5060 Ti / 128 GiB RAM machine. Cache policy, I/O coalescing and optional prefetch may change *when and where* selected experts execute, **never the original router/top-k, weights or model outputs** beyond documented numerical kernel tolerances.
+
+- **First:** benchmark physical NVMe reads, host↔GPU transfers and actual original-expert compute; compare no-cache, LRU, LFU and cost-aware placement under identical memory caps. Finish the existing one-layer and full-decoder correctness gates before making GLM-specific throughput claims.
+- **Optional offline research:** evaluate **QZERA/QuantumZip** (small QUBO/QAOA scheduling instances) against classical exact/CP-SAT and heuristic solvers. A quantum *simulator* is **not** a memory compressor or demonstrated speedup. QZERA must not be a runtime dependency.
+- **Current status:** **research plan only** — no demonstrated full-model inference, RTX FP8 kernel parity, live GLM router traces or scheduler speedup.
+
+**[Read the detailed research note: architecture, traffic bounds, external research, experiment matrix and acceptance gates](docs/EXPERT_MEMORY_SCHEDULING_RESEARCH_2026-11-04.md).**
+
 ---
 
 > **Direction update · 2026-11-03 · DRAFT / NOT A FULL-MODEL RUNNER**

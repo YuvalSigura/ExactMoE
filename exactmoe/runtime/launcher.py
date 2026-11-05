@@ -82,6 +82,22 @@ def homelab_runtime_profile(variant: Variant, *, model_profile_id: str = "") -> 
     }
 
 
+def homelab_env(variant: Variant, *, decode_tok_s: float = 0.8, max_output_tokens: int = 3584) -> dict[str, str]:
+    """HOMELAB's settings for this variant's server: address, the exact served model id (Colibri refuses any other
+    name), and timeouts sized for a slow local model. A call may legitimately run max_output_tokens / decode rate
+    plus a long prefill; HOMELAB's default 420 s timeout would cut it. The outage wait covers a server restart
+    (the first load of a ~420 GB container takes minutes)."""
+    worst = int(max_output_tokens / max(decode_tok_s, 0.1) + 600)
+    return {
+        "HOMELAB_MODEL_BASE_URL": f"{base_url(variant)}/v1",
+        "HOMELAB_MODEL_NAME": variant.id,
+        "HOMELAB_MODEL_LOCAL_ONLY": "true",
+        "HOMELAB_MODEL_TIMEOUT": str(min(worst, 7200)),
+        "HOMELAB_MODEL_OUTAGE_WAIT_SECONDS": "1800",
+        "HOMELAB_MODEL_MAX_PROMPT_WINDOW_TOKENS": str(variant.ctx),
+    }
+
+
 def _get(url: str, timeout: float) -> tuple[int, bytes]:
     req = urllib.request.Request(url, method="GET")
     with urllib.request.urlopen(req, timeout=timeout) as resp:   # noqa: S310 - loopback URL built above

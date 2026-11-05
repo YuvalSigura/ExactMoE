@@ -5,6 +5,7 @@
   status <variant>                  which checks have evidence
   command <variant>                 the exact serve argv and env
   homelab-profile <variant>         a HOMELAB RuntimeProfile record (JSON)
+  homelab-env <variant>             HOMELAB environment for this server (address, served model id, timeouts)
   serve <variant>                   start coli serve on loopback; Ctrl-C stops it and releases the GPU lock
   first-token <variant>             ask a running server one question; records the first_token evidence
   role-delta <before> <after> <out> one role's usage from two snapshots of <container>/.coli_usage
@@ -39,7 +40,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--registry", type=Path, default=None, help="JSON file of extra variants")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("variants")
-    for name in ("ready", "status", "command", "homelab-profile", "serve", "first-token"):
+    for name in ("ready", "status", "command", "homelab-profile", "homelab-env", "serve", "first-token"):
         sub.add_parser(name).add_argument("variant")
     d = sub.add_parser("role-delta")
     d.add_argument("before", type=Path); d.add_argument("after", type=Path); d.add_argument("out", type=Path)
@@ -55,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
             v = reg.get(vid)
             print(f"{vid}: {v.description}")
         return 0
-    if a.cmd in ("ready", "status", "command", "homelab-profile", "serve", "first-token"):
+    if a.cmd in ("ready", "status", "command", "homelab-profile", "homelab-env", "serve", "first-token"):
         v = reg.get(a.variant)
     if a.cmd == "ready":
         print(json.dumps(readiness(v), indent=1)); return 0
@@ -66,6 +67,10 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"argv": argv_, "env": env, "cwd": v.engine_dir}, indent=1)); return 0
     if a.cmd == "homelab-profile":
         print(json.dumps(launcher.homelab_runtime_profile(v), indent=1)); return 0
+    if a.cmd == "homelab-env":
+        for key, value in launcher.homelab_env(v).items():
+            print(f"{key}={value}")
+        return 0
     if a.cmd == "serve":
         state = readiness(v)
         if not state["ready"]:

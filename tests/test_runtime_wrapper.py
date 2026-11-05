@@ -240,3 +240,14 @@ def test_choose_ranks_options_by_their_own_tokens_only():
         ch.choose("u", "m", prompt, ["a", "a"], post=fake_post)
     with pytest.raises(ValueError):
         ch.option_logprob({"choices": [{"logprobs": {"text_offset": [0], "token_logprobs": [-1.0]}}]}, 5)
+
+
+def test_homelab_env_names_the_served_model_and_fits_a_slow_model():
+    from exactmoe.runtime import launcher
+    from exactmoe.runtime.variants import VariantRegistry
+    v = VariantRegistry().get("glm53-x4g64-r8-fast")
+    env = launcher.homelab_env(v)
+    assert env["HOMELAB_MODEL_NAME"] == v.id                       # Colibri refuses any other model name
+    assert env["HOMELAB_MODEL_BASE_URL"] == f"http://127.0.0.1:{v.port}/v1"
+    assert int(env["HOMELAB_MODEL_TIMEOUT"]) > 3584 / 0.8          # a full-length answer at 0.8 tok/s fits
+    assert env["HOMELAB_MODEL_LOCAL_ONLY"] == "true"

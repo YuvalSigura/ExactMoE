@@ -39,6 +39,7 @@ class Variant:
     pin_file: str = ""                 # Colibri usage/stats file of a role profile (see role_profiles.py)
     pin_gb: float = 0.0
     extra_env: dict[str, str] = field(default_factory=dict)
+    extra_args: list[str] = field(default_factory=list)   # appended to `coli serve`
     differs_from_original: list[str] = field(default_factory=list)
 
     def container_path(self) -> Path:
@@ -67,6 +68,42 @@ def builtin_variants() -> list[Variant]:
                 "routed experts int4 gs64: measured 14-15% MoE-output error on layer-3 experts (proxy input)",
                 "resident tensors int8 instead of FP8",
                 "no MTP head (no speculative decoding)",
+            ],
+        ),
+        Variant(
+            id="glm53-x4g64-r8-cuda",
+            description="Same container as glm53-x4g64-r8, with coli's VRAM plan applied on the RTX 5060 Ti (--auto-tier)",
+            container=str(MODELS_ROOT / "GLM-5.3-colibri-x4g64-r8"),
+            resident_bits=8, expert_bits=4, group_size=64, dsa_indexer=True, mtp=False, uses_gpu=True,
+            extra_args=["--auto-tier"],
+            differs_from_original=[
+                "routed experts int4 gs64: measured 14-15% MoE-output error on layer-3 experts (proxy input)",
+                "resident tensors int8 instead of FP8",
+                "no MTP head (no speculative decoding)",
+                "GPU kernels: not bit-identical to the CPU path (oracle 17/17 on the tiny model)",
+            ],
+        ),
+        Variant(
+            id="glm53-x4g64-r8-fast",
+            description=("Same container; HOMELAB Colibri branch (homelab/prefill-gpu-staging): prompt experts, "
+                         "attention projections and the MLA attention core on the GPU as cuBLAS GEMMs"),
+            container=str(MODELS_ROOT / "GLM-5.3-colibri-x4g64-r8"),
+            resident_bits=8, expert_bits=4, group_size=64, dsa_indexer=True, mtp=False, uses_gpu=True,
+            extra_env={
+                "CUDA_DENSE": "0",              # the whole dense set (17.6 GB) does not fit in 16 GB
+                "CUDA_DENSE_MATCH": "self_attn.kv_b_proj,self_attn.o_proj,self_attn.q_b_proj,"
+                                    "self_attn.q_a_proj,self_attn.kv_a_proj",
+                "CUDA_EXPERT_GB": "0",          # VRAM goes to attention; the expert tier gave no decode gain here
+                "COLI_CUDA_GEMM_MIN": "32",
+                "COLI_PFGPU": "4",
+                "COLI_CUDA_MLA_PREFILL": "1",
+                "DIRECT": "1",
+            },
+            differs_from_original=[
+                "routed experts int4 gs64: measured 14-15% MoE-output error on layer-3 experts (proxy input)",
+                "resident tensors int8 instead of FP8",
+                "no MTP head (no speculative decoding)",
+                "GPU GEMMs: TF32 for experts and projections, FP32 attention; tiny-model logits match the CPU path",
             ],
         ),
     ]
@@ -124,7 +161,7 @@ def readiness(variant: Variant) -> dict[str, Any]:
 
 
 def evidence_dir(variant: Variant) -> Path:
-    return variant.container_path() / ".exactmoe-evidence"
+    return variant.container_path() / ".exactmoe-evidence" / variant.id   # per variant: two variants can share a container
 
 
 def verification_status(variant: Variant) -> dict[str, Any]:

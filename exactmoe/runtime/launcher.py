@@ -42,7 +42,9 @@ def serve_command(variant: Variant, host: str = "127.0.0.1") -> tuple[list[str],
     argv = [variant.python, str(engine / "coli"), "serve",
             "--model", variant.container, "--host", host, "--port", str(variant.port),
             "--model-id", variant.id, "--ram", str(variant.ram_gb), "--ctx", str(variant.ctx),
-            "--policy", "quality", "--gpu", "auto" if variant.uses_gpu else "none"]
+            "--policy", "quality", "--gpu", "auto" if variant.uses_gpu else "none", *variant.extra_args]
+    if "--host" in variant.extra_args or "--port" in variant.extra_args:
+        raise ValueError("host and port come from the variant, not from extra_args")
     env = {"COLI_MODEL_ID": variant.id}
     if not variant.uses_gpu:
         env["CUDA_VISIBLE_DEVICES"] = "-1"

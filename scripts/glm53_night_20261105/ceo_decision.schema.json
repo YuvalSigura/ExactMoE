@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "properties": {
+    "decision": {"type": "string", "enum": ["continue", "delegate", "stop", "finish"]},
+    "role": {"type": "string"},
+    "task": {"type": "string"},
+    "explanation": {"type": "string"},
+    "fact": {"type": "string"},
+    "action": {"type": "string"},
+    "measure": {"type": "string"}
+  },
+  "required": ["decision", "role", "task", "explanation", "fact", "action", "measure"]
+}

@@ -232,3 +232,14 @@ It is built but not yet run (the GPTQ build holds the container and the GPU).
 - **What follows, for speed:**
   - fewer output tokens (a short CEO answer format; each token saved is about 1.4 s);
   - a higher RAM hit rate without substitution (`-lane`, to be measured in the engine).
+
+### Fast lane measured in the engine (same prompt, temperature 0, 160 tokens max, no speculation)
+
+| `COLI_SKIP_LANE` | decode tok/s | expert hit | decode slots skipped | answer |
+|---|---|---|---|---|
+| off | 0.72 | 67% | 0 | valid JSON, delegates the cross-account check |
+| 0.10 | **0.92 (+28%)** | 77% | 19% | the same decision and plan, reworded |
+| 0.12 | **1.19 (+65%)** | 85% | 30% | the same decision and plan, reworded |
+
+- At 0.12 the lane is faster than CACHE_ROUTE turbo (1.10), with about a third of its offline routed-output error.
+- This is one prompt. Gate 2's decision agreement (fast against lane) is the real quality test.

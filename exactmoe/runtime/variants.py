@@ -133,6 +133,29 @@ def builtin_variants() -> list[Variant]:
                 "routed experts GPTQ/RTN int4, resident int8, no MTP, GPU GEMMs as in -fast",
             ],
         ),
+        Variant(
+            id="glm53-x4g64-r8-lane",
+            description=("fast + the fast lane (COLI_SKIP_LANE=0.10): in decode, a selected expert that is not in RAM "
+                         "and carries < 10% of the token's routing mass is skipped, no substitute, no renormalisation"),
+            container=str(MODELS_ROOT / "GLM-5.3-colibri-x4g64-r8"),
+            resident_bits=8, expert_bits=4, group_size=64, dsa_indexer=True, mtp=False, uses_gpu=True,
+            extra_args=["--no-think"],
+            extra_env={
+                "CUDA_DENSE": "0",
+                "CUDA_DENSE_MATCH": "self_attn.kv_b_proj,self_attn.o_proj,self_attn.q_b_proj,"
+                                    "self_attn.q_a_proj,self_attn.kv_a_proj",
+                "CUDA_EXPERT_GB": "0", "COLI_CUDA_GEMM_MIN": "32", "COLI_PFGPU": "4", "COLI_CUDA_MLA_PREFILL": "1",
+                "DIRECT": "1", "PILOT": "1", "PILOT_REAL": "1", "OMP_NUM_THREADS": "14",
+                "COLI_SKIP_LANE": "0.10",
+            },
+            ram_gb=112,
+            differs_from_original=[
+                "CHANGES THE MODEL'S ROUTING in decode: non-resident experts under 10% of the routing mass are "
+                "skipped. Offline (layer 3, real inputs, LRU 54/layer): 24% of disk loads avoided at 10.9% routed-"
+                "output error, vs CACHE_ROUTE's 36% avoided at 35.8%. Engine speed not yet measured",
+                "routed experts GPTQ int4 (own / Bitdeer per shard), resident int8, no MTP, GPU GEMMs as in -fast",
+            ],
+        ),
     ]
 
 

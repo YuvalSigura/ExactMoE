@@ -243,3 +243,18 @@ It is built but not yet run (the GPTQ build holds the container and the GPU).
 
 - At 0.12 the lane is faster than CACHE_ROUTE turbo (1.10), with about a third of its offline routed-output error.
 - This is one prompt. Gate 2's decision agreement (fast against lane) is the real quality test.
+
+### Lane combined with MTP (`colibri_next.exe`, with the lane also applied to verification passes of ≤4 positions)
+
+| Arm | tok/s | tok/forward | acceptance | hit |
+|---|---|---|---|---|
+| lane 0.12 alone | **1.20** | 1.00 | — | 85% |
+| lane + MTP draft=1 (lane only on single-token passes, the first build) | 0.66 | 1.85 | 85% | 61% |
+| lane + MTP draft=1 (lane on verification too) | 1.04 | 1.75 | 75% | 82% |
+| lane + MTP, draft positions at t=0.30 (`COLI_SKIP_LANE_DRAFT`) | 1.19 | 1.62 | 62% | 87% |
+| lane + MTP, draft positions resident-only (t=1.0) | 1.05 | 1.65 | 65% | 86% |
+
+- **Result: MTP adds no speed on this machine even with the lane.** Consecutive tokens use nearly disjoint experts, so each verified token costs its own expert reads.
+- Skipping harder on the draft positions saves those reads but lowers acceptance by about the same amount.
+- **MTP becomes useful only when most experts are resident** (for example after domain pruning). The head is kept for that experiment.
+- `COLI_SKIP_LANE` now also applies to MTP verification passes (≤4 positions). Caveat: a ≤4-token prefill delta after a KV-prefix resume is treated the same way.

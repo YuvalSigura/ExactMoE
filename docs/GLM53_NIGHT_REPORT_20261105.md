@@ -203,3 +203,32 @@ The fast lane is in the engine as `COLI_SKIP_LANE=<t>`:
 - it reports the share of skipped slots.
 
 It is built but not yet run (the GPTQ build holds the container and the GPU).
+
+## 10. Afternoon: full own-GPTQ container, first HOMELAB decision, MTP measured (2026-11-05)
+
+- **Own GPTQ in every routed expert:**
+  - all 140 shards, 19,286 experts;
+  - out-00000 has 20 experts;
+  - calibration: mixed plus HOMELAB-domain text, 14,147 rows;
+  - held-out layer 3: 6.57% against Bitdeer's 8.27%.
+- **Engine:** `colibri_next.exe` is installed as `colibri.exe`; `colibri_prev.exe` is kept.
+- **HOMELAB catalog:** the container is registered with a full-content digest (`890a2814…`, 426.7 GB).
+- **The served `/props` endpoint** reports the model and a 32,768-token window. The first answer was correct (391) in 34 s.
+- **First CEO decision through HOMELAB's own `CeoMissionCognition`:**
+  - valid JSON on the first attempt, and a sensible decision (delegate recon);
+  - but **1,213 s**: 2,581 prompt tokens (about 215 s to the first token) plus **583 output tokens at about 0.58 tok/s**.
+  - **Answer length is the main cost.**
+- **MTP head** (layer 78, int8, 9.7 GB overlay `C:\AI-Models\GLM-5.3-overlay-mtp`, converted from the local FP8):
+
+  | Arm | tokens/forward | acceptance | decode tok/s | expert hit |
+  |---|---|---|---|---|
+  | no speculation | 1.00 | — | **0.72** | 67% |
+  | MTP draft=1 | **1.82** | **82%** | 0.66 | 60% |
+  | MTP draft=2 | 1.85 | 76% | 0.67 | 61% |
+
+  The drafts are good, but **a 2-token forward costs 2.77 s against 1.40 s.** Consecutive tokens route to nearly disjoint experts, so verifying 2 tokens reads almost twice the experts from disk, and decode here is limited by expert I/O, not compute.
+  - **MTP does not speed up this machine.** It would only pay with the experts resident in fast memory.
+  - **Speculation also changes greedy text** at near-ties (batched verification numerics differ). The output is equivalent, not bitwise identical.
+- **What follows, for speed:**
+  - fewer output tokens (a short CEO answer format; each token saved is about 1.4 s);
+  - a higher RAM hit rate without substitution (`-lane`, to be measured in the engine).

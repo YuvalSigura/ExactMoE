@@ -91,3 +91,19 @@ CACHE_ROUTE has not yet been validated in true token-by-token generation: SCORE 
    - test the `glm53-x4g64-r8-fast` serve variant end to end.
 3. **Fast mode container:** my own 3-bit GPTQ for all experts (~300 GB). It needs all-layer calibration dumps and a CUDA PyTorch for speed.
 4. **For HOMELAB:** short JSON answers. At about 1 s per output token, every token not written is the cheapest speed-up.
+
+## 7. Generation and server tests (01:00–01:30, 28 of 140 shards on GPTQ)
+
+| Test | Result |
+|---|---|
+| Decode, x86-64-v3 build | 0.75 tok/s (hit 66%) |
+| Decode, `-march=native` build (AVX-VNNI) | 0.76 tok/s: **no gain**, the v3 build stays |
+| **CACHE_ROUTE J=2 M=16, real token-by-token generation** | **1.10 tok/s (+47%)**, RAM hit 89%. The output is coherent and correct (the five-item list) |
+| **Server, HOMELAB-style CEO decision** (system + user chat, `--no-think`, 98 prompt tokens) | **valid JSON on the first try**, a sensible decision (delegate to `web_tester`, safe and non-destructive confirmation), **~183 s for ~100 output tokens** |
+| Same with `response_format: json_schema` (grammar-forced drafts) | 183 s: **no gain**. The output is mostly free-text values, so there is little to force |
+| `runtime.choose` (score instead of generate, one request per option) | **282 s for 4 options: slower than generating.** Every short prefill still touches hundreds of experts on disk. It would need one batched forward over all options with a shared prefix (engine work). Its pick also disagreed with generation, because the scoring prompt was not in chat format |
+
+What this means for HOMELAB:
+- **Fast mode:** CACHE_ROUTE.
+- **Answers:** short JSON values, because answer length is the main lever.
+- **Thinking:** keep `--no-think` for routine roles.

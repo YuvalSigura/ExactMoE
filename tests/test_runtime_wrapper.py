@@ -229,9 +229,9 @@ def test_choose_ranks_options_by_their_own_tokens_only():
     table = {"Decision: continue": [-9.0, -9.0, -0.5], "Decision: stop": [-9.0, -9.0, -2.0],
              "Decision: delegate": [-9.0, -9.0, -1.0]}
     def fake_post(url, body, timeout):
-        assert url.endswith("/v1/completions") and body["echo"] and body["max_tokens"] == 0
+        assert url.endswith("/v1/completions") and body["echo"] and body["max_tokens"] == 1
         vals = table[body["prompt"]]
-        return {"choices": [{"logprobs": {"text_offset": [0, 9, 10], "token_logprobs": vals}}]}
+        return {"choices": [{"logprobs": {"text_offset": [0, 9, 10, len(body["prompt"])], "token_logprobs": vals + [-50.0]}}]}
     ranked = ch.choose("http://127.0.0.1:8410", "m", prompt, ["stop", "continue", "delegate"], post=fake_post)
     assert [s.option for s in ranked] == ["continue", "delegate", "stop"]
     assert ranked[0].tokens == 1 and ranked[0].logprob == -0.5        # prompt tokens are not counted

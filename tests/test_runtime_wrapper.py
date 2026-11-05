@@ -219,3 +219,24 @@ def test_accept_requires_frozen_candidate_and_significant_gain():
     assert br.accept(br.paired(base, worse, tasks), frozen_hash=h, candidate=cand)["accepted"] is False
     with pytest.raises(ValueError):
         br.paired(base, {}, tasks)
+
+
+# --- score instead of generate --------------------------------------------------------------------------
+
+def test_choose_ranks_options_by_their_own_tokens_only():
+    from exactmoe.runtime import choose as ch
+    prompt = "Decision: "
+    table = {"Decision: continue": [-9.0, -9.0, -0.5], "Decision: stop": [-9.0, -9.0, -2.0],
+             "Decision: delegate": [-9.0, -9.0, -1.0]}
+    def fake_post(url, body, timeout):
+        assert url.endswith("/v1/completions") and body["echo"] and body["max_tokens"] == 0
+        vals = table[body["prompt"]]
+        return {"choices": [{"logprobs": {"text_offset": [0, 9, 10], "token_logprobs": vals}}]}
+    ranked = ch.choose("http://127.0.0.1:8410", "m", prompt, ["stop", "continue", "delegate"], post=fake_post)
+    assert [s.option for s in ranked] == ["continue", "delegate", "stop"]
+    assert ranked[0].tokens == 1 and ranked[0].logprob == -0.5        # prompt tokens are not counted
+    assert 0.5 < ch.confidence(ranked) < 1.0
+    with pytest.raises(ValueError):
+        ch.choose("u", "m", prompt, ["a", "a"], post=fake_post)
+    with pytest.raises(ValueError):
+        ch.option_logprob({"choices": [{"logprobs": {"text_offset": [0], "token_logprobs": [-1.0]}}]}, 5)

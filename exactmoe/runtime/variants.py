@@ -127,7 +127,9 @@ def builtin_variants() -> list[Variant]:
             differs_from_original=[
                 "CHANGES THE MODEL'S ROUTING: the top-2 experts are always the router's; the other 6 slots prefer "
                 "experts already in RAM within the router's top-16 (about 16% of slots substituted). LL on 431 "
-                "tokens showed no loss; not for proof decisions",
+                "tokens showed no loss, BUT the routed-MoE output against FP8 (layer 3, real inputs) is 36% off "
+                "(p90 68%): substitution is costly; not for proof decisions. COLI_SKIP_LANE is the measured "
+                "better trade (same savings, ~3x less error) and should replace it once tested in the engine",
                 "routed experts GPTQ/RTN int4, resident int8, no MTP, GPU GEMMs as in -fast",
             ],
         ),

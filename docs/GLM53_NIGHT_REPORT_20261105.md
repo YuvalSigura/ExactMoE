@@ -107,3 +107,99 @@ What this means for HOMELAB:
 - **Fast mode:** CACHE_ROUTE.
 - **Answers:** short JSON values, because answer length is the main lever.
 - **Thinking:** keep `--no-think` for routine roles.
+
+## 8. Morning: own GPTQ on the GPU (2026-11-05, 08:00–)
+
+- **The Bitdeer migration was stopped** at 121/140 shards (HuggingFace throughput fell to about 8 MB/s). It was stopped between shards, so the container is valid.
+- **The engine now dumps calibration inputs for every layer:** `COLI_DUMP_MOE=all` writes `<COLI_DUMP_MOE_FILE>.<layer>` (built as `colibri_next.exe`).
+  - The first dump is 3,476 tokens × 75 layers.
+  - Windows shows 0 bytes for these files while the engine has them open; the real size is correct.
+- **GPU GPTQ (torch cu128 on the 5060 Ti).** The recipe is act-order plus per-group MSE clip search, int4 g64.
+  - It runs batched: the gate and up rows of 16 experts share one Hessian in a single column loop, and the down matrices go through a batched loop. That is **0.58 s per expert, against 12 s unbatched**, so about 3 hours for all 19,200 experts.
+  - A batch of 32 experts spills out of 16 GB of VRAM into shared memory and slows to a crawl.
+- **Honest quality, layer 3, 32 hottest experts, 1,565 real routed rows:**
+
+  | Calibration | Own GPTQ | Container (Bitdeer) |
+  |---|---|---|
+  | Calibration text contains the evaluation text (contaminated) | 3.66% | 8.27% |
+  | **Evaluation text excluded from calibration** | **7.86%** | **8.27%** |
+  | Earlier: same-domain split (600 calibration rows / 198 held out, same document) | 6.4% | 7.6% |
+
+  **GPTQ fits its calibration domain.** The gain is small on text from another domain and clear on text from the same domain. So the build calibrates on **HOMELAB-domain text**: about 12,000 tokens of harness prompts, code and architecture documents, plus the mixed set.
+- **Tried and dropped:**
+  - Fitting `down_proj` to the quantized gate/up path (error compensation): 31% error. A 2,048-wide least-squares fit from 600 rows overfits.
+  - Hessian weighting by routed tokens: no gain.
+
+## 9. Crash, lean quantizer, and the fast lane (2026-11-05, 09:00–10:10)
+
+### Crash: `HYPERVISOR_ERROR (0x20001)`, about 08:50
+
+| Check | Result |
+|---|---|
+| Hardware errors (WHEA), last 14 days | none |
+| NVIDIA driver GPU errors (event 153) | two, at 08:39 and 08:49, both during my GPU runs |
+| GPU errors before today | none |
+
+**Probable cause:** VRAM oversubscription.
+- The 32-expert run, and the build with 14,000 calibration rows, went past 16 GB.
+- The Windows driver then pages GPU memory into system RAM ("sysmem fallback"), and with VBS/Hyper-V active a GPU fault in that state can bring the system down.
+
+**Nothing was damaged:**
+- the build had written nothing;
+- all 160 shards were verified;
+- no HOMELAB runtime file was zero-filled.
+
+**Countermeasures:**
+- a hard cap on PyTorch VRAM (`set_per_process_memory_fraction(0.6)`): the first overload became a clean out-of-memory error with no GPU fault;
+- the lean quantizer below;
+- a monitor that watches for event 153.
+
+### Lean GPTQ (`gptq_lean.py`)
+- Returns only the codes and scales.
+- Keeps one permuted copy of the weights.
+- Factorizes the gate/up Hessian once per layer instead of once per batch.
+- Accumulates the `down_proj` Hessians over calibration chunks.
+- Splits the update into row chunks.
+
+**Effect:** peak memory is **4.3 GB instead of 8.5 GB**. The gate/up codes are bit-identical to before, and down agrees on 99.8% of codes. The full build runs at 90 s per shard.
+
+### Own GPTQ against Bitdeer, on text the calibration has not seen
+
+| Calibration | Error |
+|---|---|
+| Mixed (excluding the evaluation text) | 7.86% |
+| **HOMELAB domain plus mixed, 13,147 rows** | **6.57%** |
+| Bitdeer | 8.27% |
+
+**Conclusion:** the domain and the amount of calibration data decide the result.
+
+### Expert pruning by usage (router bias set to −1e4): ruled out
+
+| Experts pruned | Share of usage | Routed-output error |
+|---|---|---|
+| 10% | 4.5% | 14% |
+| 20% | 10.7% | 28% |
+| 30% | 17.6% | 44% |
+
+The experts are close to orthogonal, so substituting one expert for another breaks the output.
+
+### Fast lane against substitution
+
+Layer 3, 400 real tokens in text order, a simulated LRU cache of 54 experts per layer. Error is measured on the routed output against FP8.
+
+| Policy | Disk loads avoided | Error, mean / p90 |
+|---|---|---|
+| CACHE_ROUTE J=2 M=16 (the turbo variant) | 36% | **35.8% / 68%** |
+| Skip non-resident experts below 10% of the routing mass | 24% | 10.9% / 25% |
+| Skip non-resident experts below 12% of the routing mass | 66% | 32% / 56% |
+| Skip, then renormalize | — | always worse |
+
+**Turbo's substitution damages quality much more than LL on 431 tokens showed.** It must not be used for anything that matters.
+
+The fast lane is in the engine as `COLI_SKIP_LANE=<t>`:
+- it applies in decode only;
+- the strongest expert is always kept;
+- there is no renormalization;
+- it reports the share of skipped slots.
+
+It is built but not yet run (the GPTQ build holds the container and the GPU).

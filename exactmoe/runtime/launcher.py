@@ -95,6 +95,7 @@ def homelab_env(variant: Variant, *, decode_tok_s: float = 0.8, max_output_token
         "HOMELAB_MODEL_TIMEOUT": str(min(worst, 7200)),
         "HOMELAB_MODEL_OUTAGE_WAIT_SECONDS": "1800",
         "HOMELAB_MODEL_MAX_PROMPT_WINDOW_TOKENS": str(variant.ctx),
+        "HOMELAB_CEO_COMPACT": "1",     # short CEO answers: at ~1 tok/s each output token costs about a second
     }
 
 
